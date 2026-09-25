@@ -6,6 +6,7 @@ import { CONCEPT_TAG, WORDMARK, markSvg } from './mark'
 import { holdInert, releaseInert } from './inert'
 import { mountRotateGate } from './rotate'
 import { bindScene, holdScene, releaseScene, sceneHeld } from './scene'
+import { readMotion, rememberMotion } from './motion'
 
 /*
  * Persistent chrome: the silkscreen and connectors around the edge of a board.
@@ -25,16 +26,28 @@ import { bindScene, holdScene, releaseScene, sceneHeld } from './scene'
  *                 to Menu)
  *   bottom-left   SW1, a two-way DIP switch block: Sound (aria-pressed) and
  *                 Motion (aria-pressed). Motion off sets engine.motion =
- *                 false (the engine freezes idle time) and html.motion-off,
- *                 is remembered for the session (sessionStorage) and starts
- *                 off under prefers-reduced-motion
+ *                 false (the engine freezes idle time and takes the calm
+ *                 paths: quiet cuts, no parallax, no glitch), html.motion-off
+ *                 (CSS transitions and animations collapse, as under reduced
+ *                 motion) and plain, unsmoothed wheel scrolling; it is
+ *                 remembered for the session (./motion.ts) and starts off
+ *                 under prefers-reduced-motion
  *   bottom-right  J2, a pin header read like a logic analyzer: the line
- *                 "03 / 07 · Die · Services", seven header pins (pin 1
+ *                 "03 / 07 · Die · Services" (the index drops out under
+ *                 400px), seven header pins (pin 1
  *                 square, the rest round; gold, the current one lit signal
  *                 green; each a >= 24 px button that lands on its chapter)
  *                 threaded on a thin copper trace, and a green signal dot
  *                 travelling along the trace with the story (it leaves a
  *                 pin as its chapter begins and reaches the next as it ends)
+ *
+ * Read as a page: a link to the static datasheet (?read, the same view as the
+ * no-WebGL fallback) that keeps the chapter you are on as its #hash. It sits
+ * in the Menu sheet; everywhere else it is the last chrome Tab stop, hidden
+ * until focused (a skip-link pattern). On tiny viewports (a desktop at
+ * 300-400% zoom: <= 400 x 420, or a landscape window up to 600 x 500) it
+ * replaces SW1 and J2 as a visible plate, since the story's panels cannot
+ * reflow that small; Menu keeps the switches and the chapters.
  *
  * Every text sits on a solid solder-mask plate (no backdrop-filter: it would
  * make the compositor wait on every WebGL frame), dark enough for >= 4.5:1
@@ -57,26 +70,9 @@ const BUSINESS: Record<string, string> = {
 }
 const NAV = ['work', 'services', 'contact']
 const MENU_QUERY = '(max-width: 820px)'
-/** the Motion toggle's label (Sound's lives in MICROCOPY) */
-const MOTION_LABEL = 'Motion'
-const MOTION_KEY = 'hark-silicon:motion'
-const readMotion = (fallback: boolean) => {
-  try {
-    const v = sessionStorage.getItem(MOTION_KEY)
-    if (v === '1') return true
-    if (v === '0') return false
-  } catch {
-    /* blocked storage: the default for this visit */
-  }
-  return fallback
-}
-const rememberMotion = (on: boolean) => {
-  try {
-    sessionStorage.setItem(MOTION_KEY, on ? '1' : '0')
-  } catch {
-    /* private mode / blocked storage: the choice lasts until reload */
-  }
-}
+const READ_LABEL = 'Read as a page'
+/** the static datasheet view (main.ts renders the fallback for ?read) */
+const readHref = (id: string) => `?read#${id}`
 const pad = (n: number) => String(n).padStart(2, '0')
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
@@ -129,7 +125,12 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
   const toggle = (kind: 'sound' | 'motion', label: string, on: boolean) =>
     `<button class="ch-tgl ch-tgl--${kind}" type="button" data-${kind}-toggle aria-pressed="${on}"><span class="ch-dip" aria-hidden="true"><i></i></span><span class="ch-tgl-k">${label}</span><span class="ch-tgl-st" aria-hidden="true">: <b>${on ? MICROCOPY.audioOn : MICROCOPY.audioOff}</b></span></button>`
   const switches = (extra = '') =>
-    `<div class="ch-sw ch-plate${extra}"><span class="ch-ref ch-sw-ref" aria-hidden="true">SW1</span>${toggle('sound', MICROCOPY.audio, false)}${toggle('motion', MOTION_LABEL, motionOn)}</div>`
+    `<div class="ch-sw ch-plate${extra}"><span class="ch-ref ch-sw-ref" aria-hidden="true">SW1</span>${toggle('sound', MICROCOPY.audio, false)}${toggle('motion', MICROCOPY.motion, motionOn)}</div>`
+
+  // a datasheet page: folded corner, three lines of type
+  const pageIcon = `<svg class="ch-rp-ic" viewBox="0 0 12 14" aria-hidden="true" focusable="false"><path d="M1.5 .5h6l3 3v10h-9z M7.5 .5v3h3"/><path d="M3.5 6.5h5M3.5 8.75h5M3.5 11h3.2"/></svg>`
+  const readLink = (cls: string) =>
+    `<a class="${cls}" href="${readHref(slots[0]?.def.id ?? 'hero')}" data-read>${pageIcon}<span>${READ_LABEL}</span></a>`
 
   const cta = (extra = '') =>
     `<a class="ch-cta${extra}" href="#contact" data-go="contact" data-focus><span class="ch-cta-t">Start a project</span><i class="ch-cta-ar" aria-hidden="true"></i></a>`
@@ -152,7 +153,7 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
     <div class="ch-bottom">
       ${switches()}
       <div class="ch-read ch-plate">
-        <p class="ch-read-line" aria-hidden="true"><span class="ch-read-k"></span><b class="ch-read-b"></b></p>
+        <p class="ch-read-line" aria-hidden="true"><span class="ch-read-n"></span><span class="ch-read-k"></span><b class="ch-read-b"></b></p>
         <nav class="ch-pins" aria-label="Chapters">
           <span class="ch-ref ch-pins-ref" aria-hidden="true">J2</span>
           <div class="ch-pins-row">
@@ -161,6 +162,7 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
           </div>
         </nav>
       </div>
+      ${readLink('ch-rp ch-plate')}
     </div>
 
     <div class="ch-menu" id="ch-menu" role="dialog" aria-modal="true" aria-label="Menu" data-lenis-prevent hidden>
@@ -179,7 +181,7 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
             ${cta(' ch-menu-cta')}
             ${switches(' ch-menu-sw')}
           </div>
-          <p class="ch-menu-mail"><a href="mailto:${BRAND.email}">${BRAND.email}</a></p>
+          <p class="ch-menu-mail"><a href="mailto:${BRAND.email}">${BRAND.email}</a>${readLink('ch-menu-read')}</p>
         </div>
         <p class="ch-menu-strip" aria-hidden="true"><span>Hark Silicon · HK-0N · Rev A</span><span>${esc(BRAND.locale)}</span></p>
       </div>
@@ -198,10 +200,12 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
   const menuLinks = [...root.querySelectorAll<HTMLAnchorElement>('.ch-ml')]
   const soundBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-sound-toggle]')]
   const motionBtns = [...root.querySelectorAll<HTMLButtonElement>('[data-motion-toggle]')]
+  const readN = $('.ch-read-n')
   const readK = $('.ch-read-k')
   const readB = $('.ch-read-b')
   const read = $('.ch-read')
   const run = $('.ch-trace-run')
+  const readLinks = [...root.querySelectorAll<HTMLAnchorElement>('[data-read]')]
 
   // header-first tab order: the chrome comes before the active chapter's content
   const stagesEl = document.getElementById('stages')
@@ -244,7 +248,9 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
   const showRead = (i: number, cue = false) => {
     const s = slots[i]
     if (!s) return
-    readK.textContent = cue ? `Go to ${pad(i + 1)} · ${s.def.label} · ` : `${pad(i + 1)} / ${pad(total)} · ${s.def.label} · `
+    // the index is its own span so narrow screens can drop it (ui.css)
+    readN.textContent = cue ? `Go to ${pad(i + 1)} · ` : `${pad(i + 1)} / ${pad(total)} · `
+    readK.textContent = `${s.def.label} · `
     readB.textContent = biz(s.def.id, s.def.label)
     read.classList.toggle('is-cue', cue)
   }
@@ -284,11 +290,18 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
 
   // -------------------------------------------------------------------- motion
 
-  // Hold the ambient motion still: the engine's idle clock, html.motion-off
-  // (CSS and anything else can key off it) and a 'hark:motion' event
+  // Hold the motion still: the engine (idle clock frozen, calm cut, no
+  // parallax or glitch), html.motion-off (base.css collapses transitions and
+  // animations, as under reduced motion), wheel scrolling without Lenis's
+  // smoothing, and a 'hark:motion' event for anything else
+  const lenisOpts = engine.lenis.options
+  const smooth0 = { lerp: lenisOpts.lerp, smoothWheel: lenisOpts.smoothWheel }
+  const calm = () => reduced || !motionOn
   const syncMotion = () => {
     document.documentElement.classList.toggle('motion-off', !motionOn)
     engine.motion = motionOn
+    lenisOpts.lerp = motionOn ? smooth0.lerp : 1
+    lenisOpts.smoothWheel = motionOn ? smooth0.smoothWheel : false
     for (const b of motionBtns) setState(b, motionOn)
     window.dispatchEvent(new CustomEvent('hark:motion', { detail: { on: motionOn } }))
   }
@@ -329,7 +342,7 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
       () => {
         if (menuOpen) holdScene('menu')
       },
-      reduced ? 0 : 480,
+      calm() ? 0 : 480,
     )
     menu.scrollTop = 0
     const now = menuLinks[lastIndex] ?? menuLinks[0]
@@ -348,7 +361,7 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
       () => {
         if (!menuOpen) menu.hidden = true
       },
-      reduced ? 20 : 360,
+      calm() ? 20 : 360,
     )
     if (restoreFocus) menuBtn.focus({ preventScroll: true })
   }
@@ -414,6 +427,9 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
           else a.removeAttribute('aria-current')
         })
         chr.dataset.chapter = activeId
+        // Read as a page opens the datasheet at the chapter you are on
+        const href = readHref(activeId)
+        for (const a of readLinks) a.setAttribute('href', href)
       }
 
       // the signal leaves pin i as chapter i begins and runs toward pin i+1;

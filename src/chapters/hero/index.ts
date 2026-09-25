@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { CameraPose, Chapter, ChapterContext, Frame } from '../../core/types'
 import { Callout, el, reveal, rise, setRise } from '../../core/dom'
-import { BRAND, MICROCOPY } from '../../content'
+import { BRAND, MICROCOPY, SERVICES } from '../../content'
 import { clamp, ease, lerp, segment, smoothstep } from '../../core/math'
 import { S } from '../../kit/silicon'
 import { buildHero, LID_Y, type HeroSet } from './board'
@@ -18,13 +18,14 @@ import './hero.css'
  *                      signals race in from the dark edges of the board
  *                      (Traces reach), D1 lights, a light sweep crosses the
  *                      lid (envTurn).
- *   0.10–0.60  BOARD   the camera pulls up and back, sliding low across the
+ *   0.05–0.44  BOARD   the camera pulls up and back, sliding low across the
  *                      board from U2 (1.8 V regulator) past the chip to Y1
  *                      (100 MHz crystal); focus racks between them; probe
- *                      callouts name the parts; pulses stream in.
- *   0.60–0.93  PAYOFF  settled high over the chip (3/4 top-down; chip right
- *                      of centre on landscape, on top on portrait): the
- *                      tagline clocks in + CTAs.
+ *                      callouts name each part and what it stands for (the
+ *                      services, verbatim); pulses stream in.
+ *   0.37–0.93  PAYOFF  high over the chip (3/4 top-down; chip right of
+ *                      centre on landscape, on top on portrait), creeping in
+ *                      slowly with the scroll: the tagline clocks in + CTAs.
  *   0.93–1.00  OUT     the camera dives into the lid as the SEM cut begins.
  *
  * Every pose derives from `local`; frame.time only drives the idle signal
@@ -61,12 +62,14 @@ interface Shot {
   turn: number
 }
 
-type Key = 'intro' | 'b1' | 'b2' | 'pay' | 'out'
+type Key = 'intro' | 'b1' | 'b2' | 'pay' | 'hold' | 'out'
 const LAND: Record<Key, Shot> = {
   intro: { tx: 0, ty: LID_Y, tz: 0.1, az: 10, el: 13, dist: 7.6, fit: 2.6, fov: 30, sx: 0.24, sy: -0.16, fx: 0, fz: 0.1, near: 3.2, far: 4.0, ap: 0.5, kAz: 5, kEl: 13, key: 0.9, env: 0.5, turn: 1.0 },
   b1: { tx: 2.0, ty: 0.12, tz: 2.2, az: 36, el: 14, dist: 8.6, fit: 5, fov: 30, sx: 0.04, sy: -0.06, fx: 4.3, fz: 4.4, near: 6, far: 12, ap: 0.42, kAz: 22, kEl: 14, key: 1.0, env: 0.5, turn: 0.5 },
   b2: { tx: -1.9, ty: 0.1, tz: 2.0, az: -32, el: 19, dist: 9.8, fit: 6, fov: 30, sx: -0.04, sy: -0.06, fx: -4.2, fz: 4.25, near: 7, far: 13, ap: 0.42, kAz: -22, kEl: 19, key: 1.0, env: 0.5, turn: 0.5 },
   pay: { tx: 0, ty: LID_Y, tz: 0, az: -14, el: 54, dist: 11.8, fit: 3.4, fov: 30, sx: 0.42, sy: 0.03, fx: 0, fz: 0, near: 7, far: 9, ap: 0.34, kAz: 8, kEl: 50, key: 1.3, env: 0.3, turn: 0.5 },
+  /** the end of the payoff hold: the same framing, a few degrees round and a little closer */
+  hold: { tx: 0, ty: LID_Y, tz: 0, az: -6, el: 57, dist: 11.0, fit: 3.3, fov: 30, sx: 0.42, sy: 0.03, fx: 0, fz: 0, near: 7, far: 9, ap: 0.34, kAz: 8, kEl: 52, key: 1.3, env: 0.3, turn: 0.5 },
   out: { tx: 0, ty: LID_Y, tz: 0.1, az: -8, el: 70, dist: 2.3, fit: 1.2, fov: 28, sx: 0, sy: 0, fx: 0, fz: 0.1, near: 1.2, far: 1.6, ap: 0.5, kAz: 16, kEl: 64, key: 1.2, env: 0.3, turn: 0.5 },
 }
 const PORT: Record<Key, Shot> = {
@@ -74,8 +77,27 @@ const PORT: Record<Key, Shot> = {
   b1: { ...LAND.b1, sx: 0, sy: 0.08, fov: 38, fit: 3.6 },
   b2: { ...LAND.b2, sx: 0, sy: 0.08, fov: 38, fit: 4.0 },
   pay: { ...LAND.pay, sx: 0, sy: 0.36, fov: 38, fit: 3.9, el: 58, kEl: 66, key: 1.1 },
+  hold: { ...LAND.hold, sx: 0, sy: 0.36, fov: 38, fit: 3.75, el: 61, kEl: 66, key: 1.1 },
   out: { ...LAND.out, fov: 34, fit: 1.4 },
 }
+
+/**
+ * The beats (local). The tour is short so the tagline lands about a viewport
+ * in; the payoff then holds (creeping) until the dive.
+ */
+const T = {
+  /** intro sheet fades */
+  sheet: [0.065, 0.1],
+  /** intro → U2 → Y1 → payoff (camera) */
+  b1: [0.05, 0.19],
+  b2: [0.19, 0.31],
+  pay: [0.31, 0.44],
+  /** payoff copy in (the camera is still settling) and out */
+  copy: [0.37, 0.43],
+  copyOut: [0.925, 0.955],
+  /** the dive into the lid */
+  out: 0.925,
+} as const
 
 /** smootherstep on a segment */
 const sm = (x: number, a: number, b: number) => {
@@ -112,20 +134,24 @@ export default function create(): Chapter {
   const tmpU = new THREE.Vector3()
   const UP = new THREE.Vector3(0, 1, 0)
   const tmpP = new THREE.Vector3()
-  // a private camera for callout projection: this frame's pose (+ the engine's parallax)
-  const proj = new THREE.PerspectiveCamera(28, 1, 0.05, 400)
+  /** first frame after entering: the engine camera still holds the last chapter's pose */
+  let fresh = true
   const ledCol = new THREE.Color()
   const ledOff = new THREE.Color('#06140d')
   const signal = new THREE.Color(S.signal)
 
+  const SHOT_KEYS = Object.keys(LAND.intro) as (keyof Shot)[]
   const shotAt = (local: number, portrait: boolean, out: Shot) => {
     const P = portrait ? PORT : LAND
-    const w1 = sm(local, 0.06, 0.3)
-    const w2 = sm(local, 0.3, 0.5)
-    const w3 = sm(local, 0.5, 0.67)
-    const w4 = Math.pow(segment(local, 0.925, 1), 1.7)
-    for (const k of Object.keys(out) as (keyof Shot)[]) {
-      out[k] = lerp(lerp(lerp(lerp(P.intro[k], P.b1[k], w1), P.b2[k], w2), P.pay[k], w3), P.out[k], w4)
+    const w1 = sm(local, T.b1[0], T.b1[1])
+    const w2 = sm(local, T.b2[0], T.b2[1])
+    const w3 = sm(local, T.pay[0], T.pay[1])
+    // the hold creeps in with the scroll (never still while the page moves)
+    const wh = 0.5 - 0.5 * Math.cos(Math.PI * segment(local, T.pay[1], T.out))
+    const w4 = Math.pow(segment(local, T.out, 1), 1.7)
+    for (const k of SHOT_KEYS) {
+      const pay = lerp(P.pay[k], P.hold[k], wh)
+      out[k] = lerp(lerp(lerp(lerp(P.intro[k], P.b1[k], w1), P.b2[k], w2), pay, w3), P.out[k], w4)
     }
     return out
   }
@@ -134,6 +160,10 @@ export default function create(): Chapter {
     id: 'hero',
     group,
     anchors: [0.8],
+
+    onEnter() {
+      fresh = true
+    },
 
     async init(ctx: ChapterContext) {
       reduced = ctx.reducedMotion
@@ -174,16 +204,19 @@ export default function create(): Chapter {
         window.__hark.land('contact')
       })
 
-      // ---- probe callouts
-      const mk = (text: string, at: 'u1' | 'vdd' | 'clk', side: 'left' | 'right', ox: number, oy: number, a: number, b: number) => {
+      // ---- probe callouts: the part, and what it stands for (service titles, verbatim)
+      const svc = (slug: string) => SERVICES.find(x => x.slug === slug)?.title ?? ''
+      const mk = (part: string, lines: string[], at: 'u1' | 'vdd' | 'clk', side: 'left' | 'right', ox: number, oy: number, a: number, b: number) => {
         const c = new Callout(ctx.stage, { side, offset: { x: ctx.mobile ? Math.round(ox * 0.6) : ox, y: oy } })
-        c.label.textContent = text
+        el('span', 'hs-co-part', part, c.label)
+        for (const l of lines) if (l) el('span', 'hs-co-svc', l, c.label)
         c.root.classList.add('hs-callout')
         callouts.push({ c, at, a, b })
       }
-      mk('U1 · HARK-1', 'u1', 'right', 76, -58, 0.15, 0.37)
-      mk('VDD 1.8 V', 'vdd', 'right', 62, -52, 0.17, 0.33)
-      mk('CLK 100 MHz', 'clk', 'left', 62, -52, 0.37, 0.55)
+      // the logic, the power, the clock
+      mk('U1 · HARK-1', [svc('software-development'), svc('ai-consulting')], 'u1', 'right', 76, -64, 0.115, 0.215)
+      mk('U2 · VDD 1.8 V', [svc('web-design'), svc('ecommerce')], 'vdd', 'right', 62, -58, 0.09, 0.2)
+      mk('Y1 · CLK 100 MHz', [svc('page-speed'), svc('seo-geo')], 'clk', 'left', 62, -58, 0.2, 0.335)
 
       const onReveal = () => {
         if (revealAt < 0) revealAt = now()
@@ -212,7 +245,7 @@ export default function create(): Chapter {
       shotAt(local, portrait, shot)
       // narrower landscapes: the intro subject slides right, clear of the datasheet
       // (short landscape phones: the sheet is half the screen wide)
-      if (!portrait) shot.sx += (frame.height <= 500 ? 0.2 : clamp((1.6 - aspect) * 0.3, 0, 0.12)) * (1 - sm(local, 0.06, 0.3))
+      if (!portrait) shot.sx += (frame.height <= 500 ? 0.2 : clamp((1.6 - aspect) * 0.3, 0, 0.12)) * (1 - sm(local, T.b1[0], T.b1[1]))
       const tanV = Math.tan(THREE.MathUtils.degToRad(shot.fov / 2))
       const d = Math.max(shot.dist, shot.fit / (2 * tanV * aspect))
       const az = THREE.MathUtils.degToRad(shot.az)
@@ -301,26 +334,17 @@ export default function create(): Chapter {
       pp.grain = 0.03
 
       // ---- DOM
-      reveal(intro, 1 - smoothstep(0.075, 0.11, local))
+      reveal(intro, 1 - smoothstep(T.sheet[0], T.sheet[1], local))
       intro.classList.toggle('is-in', on && since > (reduced ? 0 : 0.35))
-      reveal(payoff, smoothstep(0.6, 0.66, local) * (1 - smoothstep(0.925, 0.955, local)), 0)
-      setRise(title, local > 0.615 && local < 0.945)
+      reveal(payoff, smoothstep(T.copy[0], T.copy[1], local) * (1 - smoothstep(T.copyOut[0], T.copyOut[1], local)), 0)
+      setRise(title, local > T.copy[0] + 0.015 && local < 0.945)
 
-      // ---- callouts: this frame's pose (plus the engine's pointer parallax)
-      proj.fov = fov
-      proj.aspect = aspect
-      proj.position.copy(pos)
-      proj.up.set(0, 1, 0)
-      proj.lookAt(tgt)
-      if (!reduced && parallax) {
-        proj.updateMatrixWorld()
-        tmpR.setFromMatrixColumn(proj.matrixWorld, 0)
-        tmpU.setFromMatrixColumn(proj.matrixWorld, 1)
-        proj.position.addScaledVector(tmpR, frame.pointer.x * parallax).addScaledVector(tmpU, frame.pointer.y * parallax * 0.6)
-        proj.lookAt(tgt)
-      }
-      proj.updateProjectionMatrix()
-      proj.updateMatrixWorld()
+      // ---- callouts, projected with the camera as rendered (the engine time-damps the
+      // pose; last frame's is a frame old at most). The first frame after entering, it
+      // is still another chapter's, so the callouts sit that one frame out.
+      const skip = fresh
+      fresh = false
+      const cam = ctx.camera
       const H = frame.height
       const shortLand = !portrait && H <= 500
       const safeTop = shortLand ? 56 : clamp(0.105 * H, 80, 112)
@@ -328,13 +352,13 @@ export default function create(): Chapter {
       const v = tmpP
       for (const { c, at, a, b } of callouts) {
         const p = set.pins[at]
-        let vis = smoothstep(a, a + 0.03, local) * (1 - smoothstep(b - 0.03, b, local))
+        let vis = skip ? 0 : smoothstep(a, a + 0.025, local) * (1 - smoothstep(b - 0.025, b, local))
         if (vis > 0) {
-          v.copy(p).project(proj)
+          v.copy(p).project(cam)
           const y = (-v.y * 0.5 + 0.5) * H
           vis *= smoothstep(safeTop + 44, safeTop + 76, y) * (1 - smoothstep(H - safeBot - 40, H - safeBot - 12, y))
         }
-        c.update(p, proj, frame.width, H, vis)
+        c.update(p, cam, frame.width, H, vis)
       }
     },
 

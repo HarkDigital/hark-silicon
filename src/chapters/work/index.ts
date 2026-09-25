@@ -20,9 +20,13 @@ import './work.css'
  * Then the camera pulls back to a column of nine chips silkscreened with the
  * other projects, placed like a pick-and-place machine, beside a pinout table.
  *
- *   0.000–0.080  intro: "Built to be heard." over U1 and the bus
- *   0.080–0.820  six modules (~0.123 each): glide 0–30%, burst arrives 26%,
- *                boot 26–42%, datasheet panel 22–99%
+ *   0.000–0.160  intro: "Built to be heard." over U1 and the bus, settled
+ *                from the end of the cut (~0.045) through the heading stop
+ *                (0.06) and the nav landing (0.12) to 0.138 (0.35 vh)
+ *   0.160–0.820  six modules (0.110 each): glide 0–30%, burst arrives 26%,
+ *                boot 26–42%, datasheet panel 22–99%. Each stop has its own
+ *                angle; module 3 is a low grazing pass along the bus, module
+ *                5 looks nearly straight down
  *   0.820–0.953  "Nine more, all live." — the nine chips drop in, a burst
  *                fans out to them, the table's rows light them one by one
  *   0.953–1.000  out: a fast push down into the last chip (the SEM cut)
@@ -35,7 +39,7 @@ const FEATURED = WORK.filter(w => w.featured)
 const REST = WORK.filter(w => !w.featured)
 const isPreview = (url: string) => /harktest\.com/i.test(url)
 
-const F0 = 0.08
+const F0 = 0.16
 const F1 = 0.82
 const SPAN = (F1 - F0) / NF
 const itemStart = (k: number) => F0 + SPAN * k
@@ -47,7 +51,12 @@ const ARRIVE0 = 0.15
 const BOOT = 0.035
 const SCAN = 0.095
 /** the intro's glide toward module 1 starts here */
-const I0 = 0.056
+const I0 = 0.118
+/** the intro copy: settled until INTRO_OUT0, gone by INTRO_OUT1 (before module 1's panel) */
+const INTRO_OUT0 = 0.138
+const INTRO_OUT1 = 0.154
+/** module 1's signal burst leaves U1 while the headline is up */
+const BURST0 = 0.07
 /** the nine */
 const PLACE0 = 0.83
 const PLACE_STEP = 0.0016
@@ -73,6 +82,14 @@ const hostOf = (url: string) => {
     return url
   }
 }
+/**
+ * Per-module stop: yaw offset, pitch offset (rad) and distance factor, so the
+ * six stops don't repeat one shot. Module 3 (k = 2) is a low grazing pass
+ * along the bus into its connector; module 5 (k = 4) is nearly top-down.
+ */
+const AZ = [0, -0.19, 0.2, 0.16, -0.05, -0.17]
+const EL = [0, 0.06, -0.3, -0.06, 0.3, 0.05]
+const DK = [1, 1.05, 0.95, 0.96, 1.02, 1.05]
 const WORDS = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve']
 
 interface Region {
@@ -143,6 +160,9 @@ class Work implements Chapter {
 
   // DOM
   private safe!: HTMLElement
+  /** portrait pinout: a dark scrim under the chrome so the chip column's silkscreen never crowds the brand plate */
+  private scrim!: HTMLElement
+  private scrimV = -1
   private intro!: HTMLElement
   private introTitle!: HTMLElement
   private dock!: HTMLElement
@@ -168,6 +188,8 @@ class Work implements Chapter {
   /** true between onEnter and onLeave (the engine also runs update() while prewarming) */
   private active = false
   private placed = -1
+  /** the depth-of-field veil was shed this visit (html.lowfx) */
+  private veilShed = false
 
   async init(ctx: ChapterContext) {
     this.ctx = ctx
@@ -234,6 +256,8 @@ class Work implements Chapter {
 
   private buildDom(stage: HTMLElement) {
     this.safe = el('div', 'wk-safe', undefined, stage)
+    this.scrim = el('div', 'wk-scrim', undefined, stage)
+    this.scrim.setAttribute('aria-hidden', 'true')
 
     this.intro = el('div', 'wk-intro', undefined, stage)
     el('p', 'hud-eyebrow', SECTIONS.work.eyebrow, this.intro)
@@ -376,9 +400,11 @@ class Work implements Chapter {
   private moduleShot(k: number, drift: number, out: Shot) {
     const L = this.lay!
     const port = L.portrait
+    // portrait frames are narrow: a gentler version of each module's angle
+    const vary = port ? 0.6 : 1
     out.fov = FOV
-    out.yaw = 0.02 - drift * 0.025
-    out.pitch = port ? 1.02 : 0.98
+    out.yaw = 0.02 + AZ[k] * vary - drift * 0.025
+    out.pitch = (port ? 1.02 : 0.98) + EL[k] * vary
     if (port) {
       out.C.set(modX(k) + drift * 0.3, 0.45, DISP.z + 1.35)
       this.fit(out, DISP.w + 0.8, (DISP.d + 3.6) * Math.sin(out.pitch) + 0.9, this.region('item', k))
@@ -386,7 +412,7 @@ class Work implements Chapter {
       out.C.set(modX(k) + drift * 0.45, 0.4, DISP.z + 2.0)
       this.fit(out, DISP.w + 2.2, (DISP.d + 5.6) * Math.sin(out.pitch) + 0.9, this.region('item', k))
     }
-    out.dist *= 1.02 - drift * 0.05
+    out.dist *= DK[k] * (1.02 - drift * 0.05)
     return out
   }
 
@@ -414,10 +440,13 @@ class Work implements Chapter {
     out.fov = FOV
     const mid = NR - 1
     if (L.portrait) {
+      // three rows in the band between the chrome and the table; the column's
+      // ends stop short of the band's edges (U15 never pans up under the brand
+      // plate, the board's front edge stays behind the table)
       out.yaw = 0
       out.pitch = 0.98
-      out.C.set(NINE.x + 4.4, 0.2, nineZ(clamp(row, 0, mid)) + 0.1)
-      this.fit(out, 11.6, 5.4 * Math.sin(out.pitch) + 0.5, this.region('list', 0))
+      out.C.set(NINE.x + 4.4, 0.2, nineZ(clamp(row, 1, mid - 1)) + 0.2)
+      this.fit(out, 11.6, 6.6 * Math.sin(out.pitch) + 0.5, this.region('list', 0))
     } else {
       out.yaw = -0.03 - drift * 0.02
       out.pitch = 0.9
@@ -572,6 +601,8 @@ class Work implements Chapter {
     const l = clamp(local)
     const time = frame.time
     const reduced = this.reduced || frame.reducedMotion
+    // Motion off (frame.still) holds time; the bursts calm down like reduced motion
+    const calm = reduced || !!frame.still
     const L = this.ensureLayout(frame)
     const b = this.board
     if (!b) return
@@ -580,14 +611,26 @@ class Work implements Chapter {
     this.shotAt(l, this.cur)
     this.place(this.cur, L.W, L.H)
 
-    // ---- the macro lens: depth of field (desktop)
+    // ---- the macro lens: depth of field (desktop). The veil is the chapter's
+    // single biggest GPU cost: it goes first when the engine sheds effects
+    // (html.lowfx: phones, or the adaptive resolution has stepped down).
     if (b.veil) {
-      const f = this.focusAt(l, _fp)
-      b.dof.uFocus.value = this.pos.distanceTo(_fp)
-      b.dof.uBand.value = f.band
-      b.dof.uAmount.value = f.amount
-      // the veil's transmission pass runs at half resolution (a blur source only)
-      if (this.active) ctx.renderer.transmissionResolutionScale = 0.5
+      // once shed, the veil stays off for the rest of this visit (bringing it
+      // back would slow the frame and make the engine step down again)
+      if (this.active && document.documentElement.classList.contains('lowfx')) this.veilShed = true
+      const lens = !this.veilShed && !document.documentElement.classList.contains('lowfx')
+      b.veil.visible = lens
+      if (lens) {
+        const f = this.focusAt(l, _fp)
+        b.dof.uFocus.value = this.pos.distanceTo(_fp)
+        b.dof.uBand.value = f.band
+        b.dof.uAmount.value = f.amount
+        // the veil's transmission pass runs at half resolution (a blur source only)
+        if (this.active) ctx.renderer.transmissionResolutionScale = 0.5
+      } else {
+        // no veil: the pulses stay sharp with the board
+        b.dof.uAmount.value = 0
+      }
     }
 
     const inItems = l >= F0 && l < F1
@@ -598,7 +641,8 @@ class Work implements Chapter {
     const wp = ctx.world.params
     wp.top = '#0b1017'
     wp.bottom = '#030406'
-    wp.a = S.signal
+    // the light pools: a muted green (full signal green washes the backdrop)
+    wp.a = '#1f9d63'
     wp.b = '#4a5872'
     wp.bokeh = 0.9
     wp.focus.set(this.cur.cx * (L.W / Math.max(1, L.H)) * 0.8, 0.55)
@@ -627,13 +671,13 @@ class Work implements Chapter {
     const bu = b.bus.u
     bu.uTime.value = time
     bu.uFlow.value = reduced ? 0.7 : 7
-    bu.uAmbient.value = reduced ? 0.1 : 0.2
-    bu.uHead.value = reduced ? 0.55 : 1
+    bu.uAmbient.value = calm ? 0.1 : 0.2
+    bu.uHead.value = calm ? 0.55 : 1
     const go = bu.uGo.value
     const gain = bu.uGain.value
     for (let g = 0; g < NF; g++) {
       const arr = arriveAt(g)
-      const start = g === 0 ? 0.03 : itemStart(g) - 0.004
+      const start = g === 0 ? BURST0 : itemStart(g) - 0.004
       const dStart = g === 0 ? 19 : 34
       if (l < start) go[g] = 1e4
       else if (l < arr) {
@@ -657,7 +701,7 @@ class Work implements Chapter {
     bu.uHotAmt.value = hot >= 0 ? 1 : 0
 
     // ---- modules: backlight + scan, status LEDs
-    const breathe = reduced ? 1 : 0.88 + 0.12 * Math.sin(time * 2.1)
+    const breathe = calm ? 1 : 0.88 + 0.12 * Math.sin(time * 2.1)
     for (let k = 0; k < NF; k++) {
       const m = b.modules[k]
       const arr = arriveAt(k)
@@ -697,8 +741,8 @@ class Work implements Chapter {
     }
 
     // ---- DOM
-    reveal(this.intro, 1 - smoothstep(0.066, 0.082, l), 0)
-    setRise(this.introTitle, l > 0.004 && l < 0.082)
+    reveal(this.intro, 1 - smoothstep(INTRO_OUT0, INTRO_OUT1, l), 0)
+    setRise(this.introTitle, l > 0.004 && l < INTRO_OUT1)
     for (let k = 0; k < NF; k++) {
       let v = 0
       if (inItems && kAct === k) {
@@ -710,6 +754,11 @@ class Work implements Chapter {
     }
     reveal(this.list, listV, 10)
     setRise(this.listTitle, listV > 0.3)
+    const sv = L.portrait ? Math.round(listV * 50) / 50 : 0
+    if (sv !== this.scrimV) {
+      this.scrimV = sv
+      this.scrim.style.opacity = String(sv)
+    }
     const rowSel = listV > 0.01 ? hot : -1
     if (rowSel !== this.curRow) {
       this.rows.forEach((r, j) => r.classList.toggle('is-cur', j === rowSel))
@@ -731,6 +780,7 @@ class Work implements Chapter {
 
   onEnter() {
     this.active = true
+    this.veilShed = false
   }
 
   onLeave(ctx: ChapterContext) {

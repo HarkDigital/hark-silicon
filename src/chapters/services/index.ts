@@ -15,10 +15,14 @@ import './services.css'
  *               the SEM cut: a strong silhouette in monochrome); the camera
  *               drops into the cavity — the die is still an electron-
  *               microscope image (post.sem) and develops into colour
- *   0.044–0.08  the whole die, eleven blocks, gold bond wires to the
- *               leadframe; "Eleven ways to be heard."; a signal enters from
- *               a bond pad and races to block 01 as the camera dives
- *   0.08–0.92   eleven blocks (~0.076 each): the camera flies low over the
+ *   0.036–0.134 the headline beat (≥ 0.35 vh, settled at the heading stop
+ *               0.06 and the nav landing 0.08): the whole die, eleven
+ *               blocks, gold bond wires to the leadframe; "Eleven ways to be
+ *               heard." The rig drifts slowly in (scroll-driven orbit), a
+ *               signal enters from a bond pad and races to block 01, and the
+ *               camera dives to it (0.113–0.15) as the headline hands over
+ *               to the panel
+ *   0.134–0.92  eleven blocks (~0.0715 each): the camera flies low over the
  *               die from block to block (a macro slider, serpentine: back
  *               row →, middle ←, front →), racks focus ahead of each move,
  *               the studio sweeps a highlight across the iridescent silicon;
@@ -34,19 +38,24 @@ import './services.css'
  */
 
 const N = BLOCKS.length
-const A = 0.08
+/** the blocks start where the headline hands over */
+const A = 0.134
 const B = 0.92
 const SPAN = (B - A) / N
 /** half-width (in slots) of each move, centred on the boundary between two blocks */
 const TRAVEL = 0.27
 const ANCHORS = Array.from({ length: N }, (_, i) => A + SPAN * (i + 0.55))
-const INTRO_IN = 0.038
-const INTRO_OUT = 0.079
+/** the headline beat: 0.098 local = 0.37 vh at length 3.8 (the cut clears by ~0.045) */
+const INTRO_IN = 0.036
+const INTRO_OUT = A
 const CARD_OUT = 0.925
-/** lid → overview, overview hold, dive to block 01 */
+/** lid → overview, overview hold (the headline), dive to block 01 */
 const LID1 = 0.044
-const DIVE0 = 0.055
-const DIVE1 = 0.084
+const DIVE0 = 0.113
+const DIVE1 = 0.15
+/** the signal from the bond pad to block 01 */
+const SIG0 = 0.06
+const SIG1 = 0.124
 /** pull-up to the whole die */
 const OUT0 = 0.912
 const OUT1 = 0.985
@@ -88,12 +97,15 @@ export default function create(): Chapter {
   let mobile = false
   let lastLocal = -1
   let snap = true
+  /** how far the overview has drifted in (0 at the lid, 1 as the dive starts) */
+  let hold = 1
 
   const litS = new Float32Array(N)
   const probe = new THREE.PerspectiveCamera()
   const pv = new THREE.Vector3()
   const up = new THREE.Vector3(0, 1, 0)
   const tmpDir = new THREE.Vector3()
+  const fitDir = new THREE.Vector3()
   const tmpRight = new THREE.Vector3()
   const tmpUp = new THREE.Vector3()
   const poseA = mkPose()
@@ -124,8 +136,7 @@ export default function create(): Chapter {
   function fit(out: Pose, pts: THREE.Vector3[], center: THREE.Vector3, elev: number, yaw: number, fov: number, aspect: number, r: Region) {
     const tv = Math.tan(THREE.MathUtils.degToRad(fov / 2))
     const th = tv * aspect
-    tmpDir.set(-Math.sin(yaw) * Math.cos(elev), -Math.sin(elev), -Math.cos(yaw) * Math.cos(elev)).normalize()
-    const dir = tmpDir.clone()
+    const dir = fitDir.set(-Math.sin(yaw) * Math.cos(elev), -Math.sin(elev), -Math.cos(yaw) * Math.cos(elev)).normalize()
     let ext = 0
     for (const p of pts) ext = Math.max(ext, p.distanceTo(center))
     let d = Math.max(1, ext / Math.max(0.1, Math.min(r.hw * th, r.hh * tv)))
@@ -163,10 +174,17 @@ export default function create(): Chapter {
     out.fov = fov
   }
 
+  /** the NDC region of a pixel box (written into one scratch Region: each fit consumes it before the next call) */
+  const rScratch: Region = { cx: 0, cy: 0, hw: 1, hh: 1 }
+  const rLid: Region = { cx: 0, cy: 0, hw: 1.05, hh: 1.05 }
   function region(x0: number, x1: number, y0: number, y1: number, W: number, H: number, fill: number): Region {
     const w = Math.max(40, x1 - x0)
     const h = Math.max(40, y1 - y0)
-    return { cx: (x0 + x0 + w) / W - 1, cy: 1 - (y0 + y0 + h) / H, hw: (w / W) * fill, hh: (h / H) * fill }
+    rScratch.cx = (x0 + x0 + w) / W - 1
+    rScratch.cy = 1 - (y0 + y0 + h) / H
+    rScratch.hw = (w / W) * fill
+    rScratch.hh = (h / H) * fill
+    return rScratch
   }
 
   /** the rest pose for a tour key (LID, OVER, block 0..10, OUT) */
@@ -180,14 +198,17 @@ export default function create(): Chapter {
     const safeBottom = m.valid ? m.safeBottom : H * 0.11
     const fov = portrait ? 40 : 32
     if (key === LID) {
-      fit(out, lidPts, lidCenter, 1.2, 0, fov, aspect, { cx: 0, cy: 0, hw: 1.05, hh: 1.05 })
+      fit(out, lidPts, lidCenter, 1.2, 0, fov, aspect, rLid)
       return
     }
     if (key === OVER) {
       const r = portrait
         ? region(gutter, W - gutter, safeTop + 4, (m.valid ? m.introTop : H * 0.6) - 16, W, H, 0.96)
         : region((m.valid ? Math.min(m.introRight, W * 0.5) : W * 0.42) + 32, W - gutter, safeTop + 8, H - safeBottom - 8, W, H, 0.96)
-      fit(out, overPts, dieCenter, portrait ? 1.0 : 0.98, -0.1, fov, aspect, r)
+      // the headline hold drifts: a slow scroll-driven orbit in (hold 0 → 1)
+      const h = hold
+      fit(out, overPts, dieCenter, (portrait ? 1.0 : 0.98) + 0.05 * (1 - h), -0.1 - 0.12 * (1 - h), fov, aspect, r)
+      out.pos.lerp(out.target, -0.045 * (1 - h))
       return
     }
     if (key === OUT) {
@@ -209,21 +230,36 @@ export default function create(): Chapter {
     return out.copy(die.centers[key])
   }
 
-  /** where the tour is: moving from → to with eased progress s (s = 1: at rest on `to`) */
+  /** where the tour is: moving from → to with eased progress s (s = 1: at rest on `to`); written into T */
+  const T = { from: LID, to: OVER, s: 0, raw: 0 }
+  function setT(from: number, to: number, raw: number, eased = true) {
+    T.from = from
+    T.to = to
+    T.raw = raw
+    T.s = eased ? glide(raw) : raw
+  }
   function tour(local: number) {
-    if (local < LID1) return { from: LID, to: OVER, s: glide(remap(local, 0.006, LID1)), raw: remap(local, 0.006, LID1) }
-    if (local < DIVE0) return { from: OVER, to: OVER, s: 1, raw: 1 }
-    if (local < DIVE1 && local < A + SPAN * (1 - TRAVEL)) return { from: OVER, to: 0, s: glide(remap(local, DIVE0, DIVE1)), raw: remap(local, DIVE0, DIVE1) }
-    if (local >= OUT0) return { from: N - 1, to: OUT, s: glide(remap(local, OUT0, OUT1)), raw: remap(local, OUT0, OUT1) }
+    if (local < LID1) return setT(LID, OVER, remap(local, 0.006, LID1))
+    if (local < DIVE0) return setT(OVER, OVER, 1, false)
+    if (local < DIVE1 && local < A + SPAN * (1 - TRAVEL)) return setT(OVER, 0, remap(local, DIVE0, DIVE1))
+    if (local >= OUT0) return setT(N - 1, OUT, remap(local, OUT0, OUT1))
     const u = (local - A) / SPAN
     for (let j = 1; j < N; j++) {
-      if (Math.abs(u - j) < TRAVEL) {
-        const raw = (u - (j - TRAVEL)) / (2 * TRAVEL)
-        return { from: j - 1, to: j, s: glide(raw), raw }
-      }
+      if (Math.abs(u - j) < TRAVEL) return setT(j - 1, j, (u - (j - TRAVEL)) / (2 * TRAVEL))
     }
     const k = Math.max(0, Math.min(N - 1, Math.floor(u + TRAVEL)))
-    return { from: k, to: k, s: 1, raw: 1 }
+    setT(k, k, 1, false)
+  }
+
+  /** how much light block k should carry at `local` (before time damping) */
+  function litTarget(k: number, local: number): number {
+    if (local < DIVE0) return 0
+    if (local >= OUT0) return Math.max(k === N - 1 ? 1 : RES, smoothstep(OUT0 + 0.005 * k, OUT0 + 0.005 * k + 0.018, local))
+    if (T.to === 0 && T.from === OVER) return k === 0 ? smoothstep(0.45, 1, T.s) : 0
+    if (T.from === T.to) return k === T.to ? 1 : k < T.to ? RES : 0
+    if (k === T.from) return lerp(1, RES, smoothstep(0, 0.55, T.s))
+    if (k === T.to) return smoothstep(0.45, 1, T.s)
+    return k < T.from ? RES : 0
   }
 
   return {
@@ -281,7 +317,8 @@ export default function create(): Chapter {
       const m = hud.metrics()
 
       // ---------- camera: rest poses of the two tour keys, blended
-      const T = tour(local)
+      hold = glide(remap(local, 0.02, DIVE0))
+      tour(local)
       restPose(T.from, poseA, frame, m)
       if (T.to !== T.from) restPose(T.to, poseB, frame, m)
       else {
@@ -297,12 +334,6 @@ export default function create(): Chapter {
         // a macro slider move: lift a touch mid-travel so the rig clears the die
         const lift = 0.12 * poseA.pos.distanceTo(poseB.pos) + 0.15
         pose.pos.y += lift * Math.sin(Math.PI * e)
-      }
-      // overview hold: a slow settle downward while the title reads
-      if (local >= LID1 && local < DIVE1) {
-        const hold = remap(local, LID1, DIVE0)
-        const k = (1 - hold) * 0.04 * (1 - e)
-        pose.pos.lerp(pose.target, -k)
       }
       // outro: keep rising into the cut
       if (local > OUT1) pose.pos.lerp(pose.target, -(local - OUT1) * 2.2)
@@ -336,24 +367,9 @@ export default function create(): Chapter {
       die.dieU.uAperture.value = ap
 
       // ---------- block light
-      const lit = (k: number): number => {
-        let v = 0
-        if (local < DIVE0) v = 0
-        else if (local >= OUT0) {
-          v = k === N - 1 ? 1 : RES
-          v = Math.max(v, smoothstep(OUT0 + 0.005 * k, OUT0 + 0.005 * k + 0.018, local))
-        } else if (T.to === 0 && T.from === OVER) v = k === 0 ? smoothstep(0.45, 1, T.s) : 0
-        else if (T.from === T.to) v = k === T.to ? 1 : k < T.to ? RES : 0
-        else {
-          if (k === T.from) v = lerp(1, RES, smoothstep(0, 0.55, T.s))
-          else if (k === T.to) v = smoothstep(0.45, 1, T.s)
-          else v = k < T.from ? RES : 0
-        }
-        return v
-      }
       const breath = rm ? 0.5 : 0.5 + 0.5 * Math.sin(t * Math.PI * 0.5)
       for (let k = 0; k < N; k++) {
-        const target = lit(k)
+        const target = litTarget(k, local)
         litS[k] = snap ? target : damp(litS[k], target, 7, dt)
         die.dieU.uLit.value[k] = litS[k]
         const L = die.labels[k]
@@ -390,8 +406,8 @@ export default function create(): Chapter {
           reach = 1e3
           glowK = 0.3
         }
-        if (k === 0 && local >= 0.047 && local < DIVE1) {
-          reach = len * clamp(remap(local, 0.047, 0.078))
+        if (k === 0 && local >= SIG0 && local < DIVE1) {
+          reach = len * clamp(remap(local, SIG0, SIG1))
           glowK = 1
         }
         bu.uReach.value[k] = reach

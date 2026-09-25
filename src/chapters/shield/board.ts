@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { MAT, S, Traces, chipPackage, route, silk } from '../../kit/silicon'
+import { MAT, MATI, S, Traces, chipPackage, route, silk } from '../../kit/silicon'
 import { rng } from '../../core/math'
 import { nextFrame } from '../../core/yield'
 
@@ -205,6 +205,9 @@ export interface Board {
 /** Macro metals: a touch rougher than the kit's so flat pads catch the studio from any angle. */
 const GOLD = new THREE.MeshStandardMaterial({ color: '#dcaa4c', roughness: 0.34, metalness: 1 })
 const TIN = new THREE.MeshStandardMaterial({ color: '#c9ced4', roughness: 0.34, metalness: 1 })
+/** instanced twins: an InstancedMesh never shares a material with a plain Mesh (three would re-resolve the program on every draw) */
+const GOLD_I = GOLD.clone()
+const TIN_I = TIN.clone()
 
 type Kind = 'c' | 'r' | 'c6' | 'r6'
 interface Passive {
@@ -222,8 +225,8 @@ function passives(list: Passive[]): THREE.Group {
   const endGeo = new THREE.BoxGeometry(0.02, 0.052, 0.052)
   const padGeo = new THREE.BoxGeometry(0.05, 0.004, 0.06)
   const bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.55 }), n)
-  const ends = new THREE.InstancedMesh(endGeo, TIN, n * 2)
-  const pads = new THREE.InstancedMesh(padGeo, GOLD, n * 2)
+  const ends = new THREE.InstancedMesh(endGeo, TIN_I, n * 2)
+  const pads = new THREE.InstancedMesh(padGeo, GOLD_I, n * 2)
   const m = new THREE.Matrix4()
   const q = new THREE.Quaternion()
   const sc = new THREE.Vector3()
@@ -697,7 +700,12 @@ export function along(path: THREE.Vector3[], d: number, out: THREE.Vector3): THR
   return out.copy(path[path.length - 1])
 }
 
-/** The kit's cached materials used in this set (cloned, never patched in place). */
+/**
+ * The kit's cached materials used in this set, plain and instanced twins
+ * (the kit's chip leads and SMD fields draw MATI.*): cloned, never patched in
+ * place, or the focus falloff would leak into every other chapter's parts.
+ */
 export function sharedMaterials(): Set<THREE.Material> {
-  return new Set<THREE.Material>([MAT.mask(), MAT.gold(), MAT.copper(), MAT.tin(), MAT.epoxy(), MAT.aluminum(), MAT.ceramic(), MAT.fr4(), MAT.silk()])
+  const kit = ['mask', 'gold', 'copper', 'tin', 'epoxy', 'aluminum', 'ceramic', 'fr4', 'silk'] as const
+  return new Set<THREE.Material>(kit.flatMap(k => [MAT[k](), MATI[k]()]))
 }

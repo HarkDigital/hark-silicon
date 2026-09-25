@@ -20,6 +20,7 @@ import { mountDebug } from './core/debug'
  *   ?p=0.42             jump to global progress
  *   ?only=work          init only that chapter (fast dev loop)
  *   ?debug              fps / chapter / progress readout
+ *   ?read               the plain datasheet page (renderFallback)
  */
 const params = new URLSearchParams(location.search)
 
@@ -48,7 +49,8 @@ async function boot() {
     stages.id = 'stages'
     document.body.insertBefore(stages, document.getElementById('chrome'))
   }
-  if (!Engine.supported()) {
+  // ?read: the chrome's "Read as a page" (the static datasheet, no WebGL)
+  if (params.has('read') || !Engine.supported()) {
     canvas.remove()
     document.getElementById('loader')?.remove()
     renderFallback(track)

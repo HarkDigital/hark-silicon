@@ -28,8 +28,8 @@ import './shield.css'
  *                          its label + the emergency CTA (anchor 0.8).
  *
  * Everything derives from `local`; frame.time drives only idle motion (pulses,
- * sparks, LED breathing/flicker). Reduced motion: slow signals, no sparks, no
- * glitch, static LEDs, no camera drift.
+ * sparks, LED breathing/flicker). Reduced motion or Motion off (frame.still):
+ * slow signals, no sparks, no glitch, static LEDs, no camera drift.
  */
 
 const STAT = STATS.find(s => s.value === '24/7') ?? STATS[STATS.length - 1]
@@ -129,6 +129,7 @@ const OFF = new THREE.Color('#cfd6cf')
 const HOT = new THREE.Color('#ff5a2a')
 const _c = new THREE.Color()
 const _c2 = new THREE.Color()
+const _look = new THREE.Vector3()
 
 // ------------------------------------------------------------------ chapter
 
@@ -152,6 +153,9 @@ export default function create(): Chapter {
   const checks: { at: number; node: HTMLElement; state: HTMLElement; from: string; to: string; on: boolean }[] = []
   let coWarn: Callout, coClamp: Callout, coCan: Callout, coWdt: Callout
   let lastVolt = ''
+  let cam: THREE.PerspectiveCamera | null = null
+  /** focus follows last frame's camera, except right after a snap (enter, jump) */
+  let camLocal = -1
   const tmp = new THREE.Vector3()
   const labelW = new Map<Callout, number>()
   const lay = { dirty: true, top: 90, bottom: 90, aRight: 0, aTop: 0, bRight: 0, bTop: 0, fRight: 0, fTop: 0, fBottom: 0, w: 0, h: 0 }
@@ -232,6 +236,7 @@ export default function create(): Chapter {
     anchors: [0.8],
 
     async init(ctx) {
+      cam = ctx.camera
       board = await buildBoard(ctx.mobile)
       group.add(board.root)
       rail = new RailPulses(board.main, board.split)
@@ -323,11 +328,13 @@ export default function create(): Chapter {
 
     onEnter() {
       lay.dirty = true
+      camLocal = -1
     },
 
     update(local, frame, ctx) {
       const st = story(local)
-      const rm = ctx.reducedMotion
+      // the calm path: reduced motion, or the visitor paused ambient motion
+      const rm = ctx.reducedMotion || !!frame.still
       const t = frame.time
       // slow, irregular waver (≤ 2 Hz components): brownout, LED flicker, glitch
       const waver = rm ? 0.5 : clamp(0.5 + 0.5 * Math.sin(t * 7.1) * Math.sin(t * 2.3 + 1.1) + 0.18 * Math.sin(t * 11.3 + 0.4))
@@ -486,12 +493,24 @@ export default function create(): Chapter {
       out.fov = fov
       out.roll = 0
       out.parallax = 0.18
-      // focus on the subject; the board behind falls off into soft shadow
-      focus.uFocus.value = d
+      // focus on the subject; the board behind falls off into soft shadow.
+      // The engine eases the pose ~0.2 s behind the scroll, so rack to the
+      // subject's depth as the lens actually sees it (last frame's camera):
+      // the raw distance would run ahead on a brisk scroll and sink the
+      // subject into the defocus until the camera caught up. The engine
+      // snaps the pose on entry and on a > 0.04 jump: use the pose then.
+      let fd = d
+      if (cam && camLocal >= 0 && Math.abs(local - camLocal) <= 0.04) {
+        cam.getWorldDirection(_look)
+        const depth = _v.copy(_S).sub(cam.position).dot(_look)
+        if (depth > 0.5) fd = d + clamp(depth - d, -3, 3)
+      }
+      camLocal = local
+      focus.uFocus.value = fd
       focus.uFar.value = tall ? 5 : 3.6
       focus.uNear.value = 2.6
-      // a macro slider breathing on its rails (never under reduced motion)
-      if (!frame.reducedMotion) {
+      // a macro slider breathing on its rails (never under reduced motion / Motion off)
+      if (!frame.reducedMotion && !frame.still) {
         const tt = frame.time
         out.position.addScaledVector(_right, Math.sin(tt * 0.21) * 0.04)
         out.position.y += Math.sin(tt * 0.17 + 1.3) * 0.025

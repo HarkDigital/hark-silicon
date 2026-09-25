@@ -60,6 +60,12 @@
     visibility 0s linear 0s;
 }
 
+/* phones and scaled-down devices (html.lowfx: no backdrop blur): the panel
+   goes near-opaque so the die's floorplan never ghosts through the quote */
+.lowfx .stage-voices .vw-panel {
+  background: rgba(8, 10, 13, 0.975);
+}
+
 /* header: the wafer map + the probe readout */
 .stage-voices .vw-head {
   display: grid;

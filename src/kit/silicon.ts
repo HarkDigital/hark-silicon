@@ -80,6 +80,13 @@ function twin<M extends THREE.Material>(m: M): M {
   if (!t) twins.set(m, (t = m.clone() as M))
   return t
 }
+/** true for any shared kit material (MAT.* or MATI.*): clone before patching it */
+export function isKitMaterial(m: THREE.Material): boolean {
+  for (const v of cache.values()) if (v === m) return true
+  for (const v of twins.values()) if (v === m) return true
+  return false
+}
+
 /** instanced twins of the kit materials (use these on InstancedMesh) */
 export const MATI = {
   mask: () => twin(MAT.mask()),

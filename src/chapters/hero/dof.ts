@@ -101,19 +101,22 @@ export function withDofRaw(m: THREE.ShaderMaterial): THREE.ShaderMaterial {
 /**
  * Clone + patch every material under `root` (shared kit materials are never
  * modified in place — other chapters use them). Meshes with
- * userData.noDof keep their material.
+ * userData.noDof keep their material. Instanced and plain meshes never share
+ * a clone (three would re-resolve the program on every alternation).
  */
 export function dofTree(root: THREE.Object3D, cache = new Map<string, THREE.Material>(), fadeOut = false) {
   root.traverse(o => {
     const mesh = o as THREE.Mesh
     if (!mesh.isMesh || mesh.userData.noDof) return
+    const inst = (o as THREE.InstancedMesh).isInstancedMesh === true
     const swap = (m: THREE.Material) => {
-      let c = cache.get(m.uuid)
+      const key = `${m.uuid}:${inst ? 'i' : 'm'}`
+      let c = cache.get(key)
       if (!c) {
         const k = m.clone()
         if (fadeOut) k.transparent = true
         c = withDof(k, fadeOut ? 'alpha' : undefined)
-        cache.set(m.uuid, c)
+        cache.set(key, c)
       }
       return c
     }

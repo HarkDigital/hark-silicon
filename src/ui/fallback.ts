@@ -7,11 +7,14 @@ import { releaseInert } from './inert'
 
 /*
  * Plain HTML version for browsers without WebGL2 (and the last resort if
- * boot fails): every chapter's copy in order, visible, typeset as a printed
+ * boot fails), and the chrome's "Read as a page" view (?read, for tiny or
+ * zoomed viewports and anyone who would rather read): every chapter's copy
+ * in story order, visible, typeset as a printed
  * DATASHEET — white paper, black ink, a signal-green header rule, a part
  * number block (HK-0N · Rev A, decorative), a contents list, and numbered
  * sections, each with its chapter's label in the margin like a datasheet's
- * section tabs. Styles: .fb-* in ui.css.
+ * section tabs. In ?read mode a "Back to the story" link leads to the
+ * section you were reading, in the 3D story. Styles: .fb-* in ui.css.
  */
 
 const BUSINESS: Record<string, string> = {
@@ -36,7 +39,12 @@ export function renderFallback(root: HTMLElement) {
   if (chrome) chrome.replaceChildren()
   root.style.pointerEvents = 'auto'
 
-  const ids = CHAPTER_COPY_IDS
+  // story order (CHAPTERS), so the numbers match the site's pins and Menu
+  const ids = [
+    ...CHAPTERS.map(c => c.id).filter(id => CHAPTER_COPY_IDS.includes(id)),
+    ...CHAPTER_COPY_IDS.filter(id => !CHAPTERS.some(c => c.id === id)),
+  ]
+  const reading = new URLSearchParams(location.search).has('read')
   const labelOf = (id: string) => CHAPTERS.find(c => c.id === id)?.label ?? ''
   const toc = ids
     .map(
@@ -45,8 +53,13 @@ export function renderFallback(root: HTMLElement) {
     )
     .join('')
 
+  const back = reading
+    ? `<p class="fb-back"><a href="${esc(location.pathname)}#${esc(ids[0] ?? 'hero')}" data-story><i aria-hidden="true"></i>Back to the story</a></p>`
+    : ''
+
   root.innerHTML = `
-  <div class="fb">
+  <div class="fb${reading ? ' fb--read' : ''}">
+    ${back}
     <header class="fb-head">
       <div class="fb-brand">
         <span class="fb-mark" aria-hidden="true">${markSvg('fb-mark-svg')}</span>
@@ -101,4 +114,19 @@ export function renderFallback(root: HTMLElement) {
     sec.append(tab, copy)
     main.appendChild(sec)
   })
+
+  if (reading) {
+    const story = root.querySelector<HTMLAnchorElement>('[data-story]')
+    // back to the story at the section in view (the story lands on #hash)
+    story?.addEventListener('click', () => {
+      let at = ids[0] ?? 'hero'
+      for (const sec of main.querySelectorAll<HTMLElement>('.fb-sec')) {
+        if (sec.getBoundingClientRect().top <= innerHeight * 0.35) at = sec.id
+      }
+      story.href = `${location.pathname}#${at}`
+    })
+    // the page is built after the browser looked for the #hash: go there now
+    const target = location.hash.length > 1 ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null
+    if (target && main.contains(target) && target.id !== ids[0]) target.scrollIntoView()
+  }
 }

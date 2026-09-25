@@ -8,10 +8,11 @@ import type { NetPath } from './layout'
  * drawn over the copper that is baked into the board texture.
  *
  * Each fragment knows its NETWORK distance d = start + along·rate. One
- * scroll-driven uniform, uFront, sweeps through the network: where the front
- * has passed a trace is live (steady glow + ambient pulses); right at the
- * front there is a bright head (the arriving signal). The ribbon is wider than
- * the copper so the light has a soft halo on the mask around it.
+ * scroll-driven uniform, uFront, sweeps through the network: right at the
+ * front there is a bright head (the arriving signal, with a short comet
+ * tail); where the front has passed, short pulses ride the trace. Between
+ * pulses the trace is plain copper: the green is only ever the signal. The
+ * ribbon is wider than the copper so a pulse has a soft halo on the mask.
  */
 
 const HALO = 3.4
@@ -22,18 +23,12 @@ export class Net {
     uTime: { value: 0 },
     uFront: { value: -1 },
     uFlow: { value: 2.2 },
-    uSteady: { value: 0.22 },
     uPulse: { value: 1 },
     uHead: { value: 3.2 },
     uColor: { value: new THREE.Color(S.signal) },
-    /** the power plane's radius (cm) and origin: traces it has reached glow faintly ("powered") */
-    uWave: { value: -10 },
-    uWaveO: { value: new THREE.Vector2() },
-    uIdle: { value: 0.07 },
   }
 
-  constructor(paths: NetPath[], origin: THREE.Vector2, y = 0.0016) {
-    this.u.uWaveO.value.copy(origin)
+  constructor(paths: NetPath[], y = 0.0016) {
     const pos: number[] = []
     const uv: number[] = []
     const start: number[] = []
@@ -107,36 +102,33 @@ export class Net {
       uniforms: this.u,
       vertexShader: /* glsl */ `
         attribute float aStart, aRate, aKind, aSeed, aCore;
-        varying vec2 vUv, vPos; varying float vStart, vRate, vKind, vSeed, vCore;
+        varying vec2 vUv; varying float vStart, vRate, vKind, vSeed, vCore;
         void main() {
-          vUv = uv; vStart = aStart; vRate = aRate; vKind = aKind; vSeed = aSeed; vCore = aCore; vPos = position.xz;
+          vUv = uv; vStart = aStart; vRate = aRate; vKind = aKind; vSeed = aSeed; vCore = aCore;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: /* glsl */ `
-        uniform float uTime, uFront, uFlow, uSteady, uPulse, uHead, uWave, uIdle;
-        uniform vec2 uWaveO;
+        uniform float uTime, uFront, uFlow, uPulse, uHead;
         uniform vec3 uColor;
-        varying vec2 vUv, vPos; varying float vStart, vRate, vKind, vSeed, vCore;
+        varying vec2 vUv; varying float vStart, vRate, vKind, vSeed, vCore;
         void main() {
           float d = vStart + max(vUv.x, 0.0) * vRate;
           float h = uFront - d;
           float live = smoothstep(0.0, 0.35, h);
-          float head = smoothstep(-0.1, 0.02, h) * (1.0 - smoothstep(0.02, 0.75, h));
-          // ambient pulses riding toward +along (into U1 for inputs, out to the LEDs for outputs)
-          float spacing = mix(3.4, 7.0, vKind);
+          // the arriving signal: a bright head with a short comet tail
+          float head = smoothstep(-0.1, 0.02, h) * (1.0 - smoothstep(0.02, 0.55, h));
+          // pulses riding toward +along (into U1 for inputs, out to the LEDs for outputs):
+          // a short head and a short tail; plain copper between them
+          float spacing = mix(3.4, 6.0, vKind);
           float ph = fract((vUv.x - uTime * uFlow) / spacing - vSeed);
-          float pulse = (1.0 - smoothstep(0.0, 0.05, 1.0 - ph)) + smoothstep(0.55, 1.0, ph) * 0.28;
+          float pulse = (1.0 - smoothstep(0.0, 0.04, 1.0 - ph)) + smoothstep(0.8, 1.0, ph) * 0.3;
           // across: the copper core + a soft halo on the mask
           float x = abs(vUv.y * 2.0 - 1.0);
           float c = 1.0 - smoothstep(vCore * 0.85, vCore * 1.15, x);
           float halo = (1.0 - x) * (1.0 - x);
-          float steady = uSteady * (1.0 + vKind * 0.6);
-          float a = live * (steady * (c + 0.3 * halo) + uPulse * (1.0 - 0.6 * vKind) * pulse * (c * 0.9 + 0.35 * halo));
-          a += head * uHead * (c + 0.4 * halo);
-          // powered but not yet carrying a signal: a faint, even glow once the plane has reached it
-          float powered = smoothstep(0.0, 0.9, uWave - length(vPos - uWaveO));
-          a += (1.0 - live) * powered * uIdle * (c + 0.15 * halo);
+          float a = live * uPulse * (1.0 - 0.4 * vKind) * pulse * (c * 0.9 + 0.3 * halo);
+          a += head * uHead * (c + 0.35 * halo);
           if (a < 0.004) discard;
           gl_FragColor = vec4(uColor * a, 1.0);
         }
@@ -147,21 +139,18 @@ export class Net {
     this.mesh.frustumCulled = false
   }
 
-  set(o: { time: number; front: number; flow: number; steady: number; pulse: number; head: number; wave: number; idle: number }) {
+  set(o: { time: number; front: number; flow: number; pulse: number; head: number }) {
     const u = this.u
-    u.uWave.value = o.wave
-    u.uIdle.value = o.idle
     u.uTime.value = o.time
     u.uFront.value = o.front
     u.uFlow.value = o.flow
-    u.uSteady.value = o.steady
     u.uPulse.value = o.pulse
     u.uHead.value = o.head
   }
 }
 
 /**
- * Soft light pools on the mask around lit LEDs (and the chip's mark), one
+ * Soft light pools on the mask around lit LEDs, one
  * instanced additive quad each; per-instance brightness.
  */
 export class Halos {

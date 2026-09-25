@@ -140,6 +140,11 @@
 .stage-hero .hs-locale {
   margin: 0;
   color: var(--fg-muted);
+  /* a small plate: the label can sit over lit traces (portrait) */
+  padding: 3px 8px;
+  margin-left: -8px;
+  background: rgba(5, 7, 11, 0.72);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .stage-hero .hs-title {
   font-size: clamp(3rem, 7.2vw, 7.8rem);
@@ -151,10 +156,25 @@
   margin-top: 6px;
 }
 
-/* probe callouts (written in caps already; the transform would turn MHz into MHZ) */
+/* probe callouts: the part (the transform would turn MHz into MHZ), then what it
+   stands for — one service per line */
 .stage-hero .hs-callout .callout-label {
+  display: grid;
+  gap: 1px;
+  padding: 4px 9px 5px;
   background: rgba(6, 8, 11, 0.86);
   text-transform: none;
+}
+.stage-hero .hs-co-part {
+  color: var(--fg-muted);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding-bottom: 3px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.stage-hero .hs-co-svc {
+  color: var(--fg);
 }
 
 /* ---------------- portrait: the chip above, copy below ---------------- */
@@ -165,7 +185,7 @@
     max-width: 560px;
   }
   .stage-hero .hs-scrim {
-    background: linear-gradient(0deg, rgba(4, 6, 9, 0.84) 0%, rgba(4, 6, 9, 0.6) 34%, rgba(4, 6, 9, 0) 56%);
+    background: linear-gradient(0deg, rgba(4, 6, 9, 0.88) 0%, rgba(4, 6, 9, 0.72) 40%, rgba(4, 6, 9, 0) 66%);
   }
   .stage-hero .hs-payoff-inner {
     right: var(--gutter);

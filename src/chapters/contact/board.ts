@@ -22,13 +22,13 @@ import {
   LED_X,
   LED_Z,
   PASSIVES,
-  PLANE_ORIGIN,
   TESTPOINTS,
   U1C,
   U1N,
   U1W,
   U1_PAD_IN,
   U1_PAD_OUT,
+  U1_LID_Y,
   U2C,
   U3C,
   U4C,
@@ -41,25 +41,27 @@ import {
   type V2,
 } from './layout'
 import { Halos, Net } from './net'
+import { buildLid } from './lid'
 
 /*
  * POWER ON · the finished Hark board, built once.
  *
  *   board      rounded FR4 slab with plated mounting holes; its top is ONE
  *              physical material with two baked canvases:
- *                map  = matte black mask, ground pour, copper traces,
+ *                map  = matte black mask, ground pour, COPPER traces,
  *                       clearance channels, via holes, white silkscreen
  *                       (designators, outlines, the Hark mark, the email)
  *                aux  = R: height (bump: the mask hugging the copper, the
- *                       raised ink), G/B: where the power plane glows
- *              and a patched emissive: a ring of light spreading from the
- *              regulator (uWave) that leaves the plane faintly lit (uPlane).
+ *                       raised ink), G: roughness, B: metalness (the copper
+ *                       catches the warm key; the mask stays matte)
  *   parts      instanced by material (tin, gold, bodies, plastic…): U1 the
- *              Hark chip (kit), regulator, flash, sensors, crystal, USB-C
- *              (a real hollow shell with a tongue), 1×6 header, bulk can,
- *              0402/0603/0805 passives, LEDs, vias, test points, fiducials.
- *   light      the Net (glowing traces), LED halos, and the etched-mark sweep
- *              over U1.
+ *              HARK-1 chip from the opening of the story (kit package, its
+ *              own laser-etched lid, gold pads under tin feet), regulator,
+ *              flash, sensors, crystal, USB-C (a real hollow shell with a
+ *              tongue), 1×6 header, bulk can, 0402/0603/0805 passives, LEDs,
+ *              vias, test points, fiducials.
+ *   light      the Net (signal pulses riding the copper), LED halos, and a
+ *              warm-white glint that crosses U1's etch as it hears the board.
  */
 
 const MM = {
@@ -118,13 +120,14 @@ const PASSIVE_COL = { c: '#8e7150', r: '#141518', f: '#2b2d31' }
 
 export interface Board {
   root: THREE.Group
+  /** the board top (mask, copper, silk): its roughness/clearcoat follow the shot */
+  surface: THREE.MeshPhysicalMaterial
   chip: THREE.Group
   net: Net
   halos: Halos
   /** LED lenses: 0 = D1 PWR, 1–4 = D2–D5 */
   lenses: THREE.InstancedMesh
-  sweepU: { uSweep: { value: number }; uLit: { value: number } }
-  planeU: { uWave: { value: number }; uPlane: { value: number }; uRing: { value: number } }
+  sweepU: { uSweep: { value: number }; uAmt: { value: number } }
   layout: Layout
   redraw(): void
   canvas: HTMLCanvasElement
@@ -155,12 +158,14 @@ export function buildBoard(o: { mobile: boolean }): Board {
   aux.colorSpace = THREE.NoColorSpace
   aux.anisotropy = 8
   let redrawCrisp = () => {}
+  let redrawLid = () => {}
   const redraw = () => {
     drawBoard(mapCv.getContext('2d')!, s, layout, 'map')
     drawBoard(auxCv.getContext('2d')!, s, layout, 'aux')
     map.needsUpdate = true
     aux.needsUpdate = true
     redrawCrisp()
+    redrawLid()
   }
   redraw()
 
@@ -194,44 +199,20 @@ export function buildBoard(o: { mobile: boolean }): Board {
     for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) + W / 2) / W, (D / 2 - p.getZ(i)) / D)
     uv.needsUpdate = true
   }
-  const green = new THREE.Color(S.signal)
-  const planeU = { uWave: { value: -10 }, uPlane: { value: 0 }, uRing: { value: 2.4 } }
+  // roughness (G) and metalness (B) come from the aux canvas: matte mask and
+  // ink, copper traces with a warm metallic sheen
   const top = new THREE.MeshPhysicalMaterial({
     map,
     color: 0xffffff,
-    roughness: 0.58,
-    metalness: 0,
+    roughness: 1,
+    roughnessMap: aux,
+    metalness: 1,
+    metalnessMap: aux,
     clearcoat: 0.32,
     clearcoatRoughness: 0.42,
     bumpMap: aux,
     bumpScale: o.mobile ? 0.55 : 0.9,
-    emissive: green,
-    emissiveMap: aux,
-    emissiveIntensity: 1,
   })
-  const origin = new THREE.Vector2((PLANE_ORIGIN.x + W / 2) / W, (D / 2 - PLANE_ORIGIN.y) / D)
-  top.onBeforeCompile = sh => {
-    sh.uniforms.uWave = planeU.uWave
-    sh.uniforms.uPlane = planeU.uPlane
-    sh.uniforms.uRing = planeU.uRing
-    sh.uniforms.uWaveO = { value: origin }
-    sh.uniforms.uBoard = { value: new THREE.Vector2(W, D) }
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uWave, uPlane, uRing; uniform vec2 uWaveO, uBoard;')
-      .replace(
-        '#include <emissivemap_fragment>',
-        `#include <emissivemap_fragment>
-        {
-          float r = length((vEmissiveMapUv - uWaveO) * uBoard);
-          float h = uWave - r;
-          // a thin bright wavefront with a short fading wake
-          float ring = smoothstep(-0.1, 0.0, h) * ((1.0 - smoothstep(0.0, 0.3, h)) + 0.07 * (1.0 - smoothstep(0.0, 2.0, h)));
-          float lit = smoothstep(0.0, 1.2, h);
-          totalEmissiveRadiance *= ring * uRing + lit * uPlane;
-        }`,
-      )
-  }
-  top.customProgramCacheKey = () => 'hs-contact-board'
   const slab = new THREE.Mesh(slabGeo, [top, MM.fr4()])
   root.add(slab)
 
@@ -244,25 +225,34 @@ export function buildBoard(o: { mobile: boolean }): Board {
   const bodies = new Boxes()
   const alu = new Boxes()
 
-  // U1: the Hark chip
+  // U1: HARK-1, the chip the story opened on (kit package, its own etched lid)
   const tinMat = MM.tin()
   const epoxyMat = MM.epoxy()
-  const chip = chipPackage({ w: U1W, kind: 'qfp', pinsPerSide: U1N, lines: ['HK-0N', 'POWER · ON'] })
+  // the package body is a plain Mesh: it must not share the instanced epoxy's material
+  const bodyMat = MM.epoxy()
+  const chip = chipPackage({ w: U1W, kind: 'qfp', pinsPerSide: U1N, top: false })
   chip.traverse(n => {
     const m = n as THREE.Mesh
     if (!m.isMesh) return
-    if (m === chip.userData.top) return
-    m.material = (m as THREE.InstancedMesh).isInstancedMesh ? tinMat : epoxyMat
+    m.material = (m as THREE.InstancedMesh).isInstancedMesh ? tinMat : bodyMat
     m.castShadow = false
   })
+  const lid = buildLid(o.mobile ? 1024 : 2048)
+  redrawLid = lid.redraw
+  const lidMesh = new THREE.Mesh(new THREE.PlaneGeometry(U1W * 0.96, U1W * 0.96), lid.material)
+  lidMesh.rotation.x = -Math.PI / 2
+  lidMesh.position.y = U1_LID_Y
+  chip.add(lidMesh)
   chip.position.set(U1C.x, 0, U1C.y)
   root.add(chip)
-  // its pads (solder), 64
+  // its pads: gold (ENIG) under each tin foot, a solder fillet on the foot
   for (let side = 0; side < 4; side++) {
     for (let k = 0; k < U1N; k++) {
       const p = u1Pin(side, k, (U1_PAD_IN + U1_PAD_OUT) / 2)
       const along = side % 2 === 0
-      solder.add(p.x, 0, p.y, along ? 0.2 : 0.06, 0.012, along ? 0.06 : 0.2)
+      gold.add(p.x, 0, p.y, along ? 0.21 : 0.066, 0.005, along ? 0.066 : 0.21)
+      const f = u1Pin(side, k, U1W / 2 + 0.15)
+      solder.add(f.x, 0.004, f.y, along ? 0.13 : 0.05, 0.012, along ? 0.05 : 0.13)
     }
   }
 
@@ -349,7 +339,7 @@ export function buildBoard(o: { mobile: boolean }): Board {
   }
 
   // LEDs (0603): body, tin ends, and a lens that lights (separate instanced basic material)
-  const ledPos: { x: number; z: number; rot: number }[] = [{ x: D1C.x, z: D1C.y, rot: 0 }, ...LED_X.map(x => ({ x, z: LED_Z, rot: Math.PI / 2 }))]
+  const ledPos: { x: number; z: number; rot: number }[] = [D1C.x, ...LED_X].map(x => ({ x, z: LED_Z, rot: Math.PI / 2 }))
   for (const l of ledPos) {
     const f = place(l.x, l.z, l.rot)
     bodies.add(l.x, 0.004, l.z, 0.12, 0.045, 0.08, l.rot, '#dcdad0')
@@ -429,7 +419,8 @@ export function buildBoard(o: { mobile: boolean }): Board {
     return m
   }
   flat(new THREE.RingGeometry(0.021, 0.046, 14), goldMat, layout.vias, 0.0012)
-  flat(new THREE.RingGeometry(HOLE_R, 0.31, 40), goldMat, HOLES, 0.0012)
+  // the big mounting rings: a softer gold so the key never blooms off them
+  flat(new THREE.RingGeometry(HOLE_R, 0.31, 40), new THREE.MeshStandardMaterial({ color: S.gold, roughness: 0.5, metalness: 1 }), HOLES, 0.0012)
   flat(
     new THREE.CircleGeometry(0.075, 24),
     goldMat,
@@ -450,37 +441,32 @@ export function buildBoard(o: { mobile: boolean }): Board {
   redrawCrisp = crisp.redraw
 
   /* ------------------------------------------------ light */
-  const net = new Net(layout.nets, PLANE_ORIGIN)
+  const net = new Net(layout.nets)
   root.add(net.mesh)
-  const halos = new Halos([...ledPos.map(l => ({ x: l.x, z: l.z, size: 0.95 })), { x: U1C.x, z: U1C.y, size: 4.4 }])
+  const halos = new Halos(ledPos.map(l => ({ x: l.x, z: l.z, size: 0.95 })))
   root.add(halos.mesh)
 
-  // the etched-mark sweep over U1 (additive, masked by the etch)
-  const topMesh = chip.userData.top as THREE.Mesh
-  const topMap = (topMesh.material as THREE.MeshStandardMaterial).map
-  const sweepU = { uSweep: { value: -1 }, uLit: { value: 0 } }
+  // U1 hears the board: a warm-white glint crosses the etch (light raking the
+  // recessed marking, not a glowing logo; additive, masked by the etch)
+  const sweepU = { uSweep: { value: -1 }, uAmt: { value: 0 } }
   const sweep = new THREE.Mesh(
-    (topMesh.geometry as THREE.PlaneGeometry).clone(),
+    lidMesh.geometry,
     new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
-      uniforms: { uMap: { value: topMap }, uColor: { value: green }, ...sweepU },
+      uniforms: { uMap: { value: lid.map }, uColor: { value: new THREE.Color('#fff1dc') }, ...sweepU },
       vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D uMap; uniform vec3 uColor; uniform float uSweep, uLit; varying vec2 vUv;
+        uniform sampler2D uMap; uniform vec3 uColor; uniform float uSweep, uAmt; varying vec2 vUv;
         void main() {
           vec3 t = texture2D(uMap, vUv).rgb;
-          // a blurred read (mip bias) gives the lit etch a soft local glow without
-          // pushing anything over the bloom threshold
-          vec3 tb = texture2D(uMap, vUv, 3.5).rgb;
-          float etch = smoothstep(0.03, 0.2, dot(t, vec3(0.3333)));
-          float glow = smoothstep(0.012, 0.1, dot(tb, vec3(0.3333)));
+          float etch = smoothstep(0.08, 0.35, dot(t, vec3(0.3333)));
           float diag = (vUv.x + (1.0 - vUv.y)) * 0.5;
-          float x = (diag - uSweep) * 7.0;
+          float x = (diag - uSweep) * 6.0;
           float band = exp(-x * x);
-          vec3 c = uColor * (etch * (band * 1.2 + uLit * 0.3) + glow * (band * 0.3 + uLit * 0.05)) + vec3(0.85, 1.0, 0.9) * band * etch * 0.22 + vec3(1.0) * band * 0.02;
+          vec3 c = uColor * band * uAmt * (etch * 0.5 + 0.035);
           if (max(c.r, max(c.g, c.b)) < 0.003) discard;
           gl_FragColor = vec4(c, 1.0);
         }
@@ -488,17 +474,17 @@ export function buildBoard(o: { mobile: boolean }): Board {
     }),
   )
   sweep.rotation.x = -Math.PI / 2
-  sweep.position.set(U1C.x, topMesh.position.y + 0.0015, U1C.y)
+  sweep.position.set(U1C.x, U1_LID_Y + 0.0015, U1C.y)
   sweep.renderOrder = 4
   root.add(sweep)
 
-  return { root, chip, net, halos, lenses, sweepU, planeU, layout, redraw, canvas: mapCv }
+  return { root, surface: top, chip, net, halos, lenses, sweepU, layout, redraw, canvas: mapCv }
 }
 
 /* ================================================================ crisp silkscreen */
 
 /**
- * Labels the opening close-ups get near to (J1, the PWR LED, the regulator)
+ * Labels the close-ups get near to (U1, J1, the regulator)
  * are drawn as real geometry from one text atlas (one draw call) instead of
  * being baked into the board map, so they stay sharp at macro distances.
  */
@@ -506,9 +492,8 @@ const CRISP: { str: string; x: number; z: number; size: number; align: CanvasTex
   { str: 'J1', x: J1C.x - 0.6, z: J1C.y - 0.28, size: 0.13, align: 'right', weight: 600 },
   { str: 'USB-C', x: J1C.x - 0.6, z: J1C.y - 0.1, size: 0.1, align: 'right', weight: 500 },
   { str: '5V IN', x: J1C.x - 0.6, z: J1C.y + 0.06, size: 0.1, align: 'right', weight: 500 },
-  { str: 'PWR', x: D1C.x, z: D1C.y + 0.26, size: 0.11, align: 'center', weight: 600 },
+  { str: 'U1', x: U1C.x - U1_PAD_OUT - 0.12, z: U1C.y + U1_PAD_OUT + 0.22, size: 0.15, align: 'right', weight: 600 },
   { str: 'F1', x: 4.35, z: 2.66, size: 0.09, align: 'center', weight: 500 },
-  { str: 'R1', x: 4.22, z: 2.96, size: 0.08, align: 'center', weight: 500 },
   { str: 'U2', x: U2C.x - 0.44, z: U2C.y - 0.3, size: 0.12, align: 'right', weight: 500 },
   { str: '3V3', x: U2C.x - 0.44, z: U2C.y - 0.12, size: 0.1, align: 'right', weight: 500 },
   ...TESTPOINTS.filter(t => t.left).map(t => ({ str: t.label, x: t.p.x - 0.19, z: t.p.y, size: 0.085, align: 'right' as CanvasTextAlign, weight: 600 })),
@@ -727,6 +712,10 @@ function buildCan(): THREE.Group {
 
 type Mode = 'map' | 'aux'
 
+/** copper seen through the black mask: a dark, warm metal (aux gives it the sheen) */
+const COPPER = '#7a4a2c'
+const COPPER_DIM = '#6a4028'
+
 /**
  * Draws the board top in board coordinates (cm). mode 'map' = colour,
  * 'aux' = R height / G,B plane-glow mask.
@@ -736,16 +725,17 @@ function drawBoard(g: CanvasRenderingContext2D, s: number, lay: Layout, mode: Mo
   const D = BD
   const map = mode === 'map'
   // palette: [map colour, aux rgb]
+  // aux: R height, G roughness, B metalness
   const C = {
-    base: map ? '#090a0d' : 'rgb(70,0,0)',
-    pour: map ? '#0e1115' : 'rgb(170,40,40)',
-    gap: map ? '#07080a' : 'rgb(40,0,0)',
-    trace: map ? '#181c22' : 'rgb(190,0,0)',
-    stub: map ? '#161a1f' : 'rgb(185,0,0)',
-    opening: map ? '#050506' : 'rgb(30,0,0)',
-    hole: map ? '#010102' : 'rgb(10,210,210)',
-    silk: map ? '#e6e6e0' : 'rgb(255,0,0)',
-    silkDim: map ? 'rgba(230,230,224,0.9)' : 'rgb(240,0,0)',
+    base: map ? '#090a0d' : 'rgb(70,148,0)',
+    pour: map ? '#0e1115' : 'rgb(170,148,0)',
+    gap: map ? '#07080a' : 'rgb(40,150,0)',
+    trace: map ? COPPER : 'rgb(190,96,150)',
+    stub: map ? COPPER_DIM : 'rgb(185,104,140)',
+    opening: map ? '#050506' : 'rgb(30,170,0)',
+    hole: map ? '#010102' : 'rgb(10,200,0)',
+    silk: map ? '#e6e6e0' : 'rgb(255,200,0)',
+    silkDim: map ? 'rgba(230,230,224,0.9)' : 'rgb(240,200,0)',
   }
   g.setTransform(1, 0, 0, 1, 0, 0)
   g.clearRect(0, 0, g.canvas.width, g.canvas.height)
@@ -788,8 +778,8 @@ function drawBoard(g: CanvasRenderingContext2D, s: number, lay: Layout, mode: Mo
   g.strokeStyle = C.stub
   for (const st of lay.stubs) strokePath(g, st.pts, st.w)
 
-  // U1 thermal / power: a big square of copper under the chip (the mask shows its edge)
-  g.fillStyle = C.stub
+  // U1 thermal / power: a big square of copper under the chip (hidden by the package)
+  g.fillStyle = map ? '#161a1f' : 'rgb(185,148,0)'
   keep(U1C.x, U1C.y, 1.5, 1.5)
 
   // mask openings (dark rings around exposed metal)
@@ -867,7 +857,7 @@ function drawBoard(g: CanvasRenderingContext2D, s: number, lay: Layout, mode: Mo
       }
     }
     circle(g, U1C.x - e + 0.02, U1C.y - e - 0.14, 0.05)
-    txt('U1', U1C.x - e - 0.02, U1C.y + e + 0.12, 0.15, { align: 'right', weight: 600 })
+    // (the 'U1' designator is crisp geometry, see CRISP)
   }
   // U2, U3, U4, U5, U6, Y1 outlines
   rect(U2C.x, U2C.y, 0.78, 0.86)
@@ -903,21 +893,21 @@ function drawBoard(g: CanvasRenderingContext2D, s: number, lay: Layout, mode: Mo
     g.closePath()
     g.fill()
     txt(`SAY HELLO · ${BRAND.email}`, ax + 0.26, J2_PIN0.y + 0.01, 0.2, { weight: 600 })
+    // the tagline under it (kept off the back edge: close framings put the back under the top chrome)
+    txt(BRAND.tagline.toUpperCase(), ax + 0.28, J2_PIN0.y + 0.38, 0.1, { weight: 500 })
   }
 
   // J1 USB-C: courtyard + label
   rect(J1C.x, J1C.y + 0.05, 1.02, 0.86)
 
-  // D1 PWR, D2–D5 status
-  rect(D1C.x, D1C.y, 0.3, 0.18)
-  g.fillRect(D1C.x + 0.15, D1C.y - 0.09, 0.03, 0.18)
-  const ledNames = ['SIG', 'LINK', 'ACT', 'RDY']
-  LED_X.forEach((x, i) => {
+  // the status row: D1 PWR, D2–D5
+  const ledNames = ['PWR', 'SIG', 'LINK', 'ACT', 'RDY']
+  ;[D1C.x, ...LED_X].forEach((x, i) => {
     rect(x, LED_Z, 0.18, 0.3)
     g.fillRect(x - 0.09, LED_Z - 0.18, 0.18, 0.03)
     txt(ledNames[i], x, LED_Z - 0.34, 0.085, { align: 'center', weight: 600 })
   })
-  txt('D2–D5', LED_X[0] - 0.22, LED_Z, 0.09, { align: 'right' })
+  txt('D1–D5', D1C.x - 0.22, LED_Z, 0.09, { align: 'right' })
 
   // C1: can outline with its polarity
   {
@@ -966,7 +956,6 @@ function drawBoard(g: CanvasRenderingContext2D, s: number, lay: Layout, mode: Mo
     txt('Hark Digital Design', -3.42, -2.78, 0.3, { font: 'sans', weight: 600, track: -0.02 })
     txt('HK-0N · POWER ON · REV A', -3.42, -2.44, 0.12, { weight: 500 })
   }
-  txt(BRAND.tagline.toUpperCase(), 0.62, -3.2, 0.12, { weight: 500 })
   txt(BRAND.locale.toUpperCase(), -3.42, -2.24, 0.085, { weight: 500 })
 
   // a small 2D code patch (decorative)

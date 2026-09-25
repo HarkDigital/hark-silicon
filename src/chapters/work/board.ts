@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { MAT, S, chipPackage } from '../../kit/silicon'
+import { MATI, chipPackage } from '../../kit/silicon'
 import { logoShapes } from '../../logo/logo'
 import { rng } from '../../core/math'
 import { Bus, type LaneDef } from './bus'
@@ -56,6 +56,7 @@ const _m = new THREE.Matrix4()
 const _q = new THREE.Quaternion()
 const _p = new THREE.Vector3()
 const _s = new THREE.Vector3()
+const _base = new THREE.Matrix4()
 
 /* ------------------------------------------------------------------ lanes */
 
@@ -238,8 +239,8 @@ class Parts {
       tan: new THREE.MeshStandardMaterial({ color: '#8a7050', roughness: 0.55 }),
       black: new THREE.MeshStandardMaterial({ color: '#121314', roughness: 0.5 }),
       tin: tin(),
-      gold: MAT.gold(),
-      epoxy: MAT.epoxy(),
+      gold: MATI.gold(),
+      epoxy: MATI.epoxy(),
       ind: new THREE.MeshStandardMaterial({ color: '#2c2d30', roughness: 0.78 }),
       plastic: new THREE.MeshStandardMaterial({ color: '#141518', roughness: 0.45 }),
       beige: new THREE.MeshStandardMaterial({ color: '#b9ab8c', roughness: 0.6 }),
@@ -263,7 +264,7 @@ class Parts {
     if (this.vias.length) {
       const ring = new THREE.RingGeometry(0.02, 0.043, 12)
       ring.rotateX(-Math.PI / 2)
-      const im = new THREE.InstancedMesh(ring, MAT.gold(), this.vias.length)
+      const im = new THREE.InstancedMesh(ring, MATI.gold(), this.vias.length)
       this.vias.forEach((m, i) => im.setMatrixAt(i, m))
       im.computeBoundingSphere()
       g.add(im)
@@ -376,19 +377,24 @@ function fpcTexture() {
   return t
 }
 
-/** soft rounded-rect contact shadow (alpha) */
+/**
+ * soft rounded-rect contact shadow, for an alphaMap. three reads alphaMap's
+ * GREEN channel, so the falloff is painted as grey on opaque black (alpha in
+ * a transparent canvas un-premultiplies to a hard-edged green = 255 mask).
+ */
 function shadowTexture() {
-  const { c, g } = canvas(128, 128)
-  const img = g.createImageData(128, 128)
-  for (let y = 0; y < 128; y++) {
-    for (let x = 0; x < 128; x++) {
-      const u = Math.abs(x / 127 - 0.5) * 2
-      const v = Math.abs(y / 127 - 0.5) * 2
-      const d = Math.max(0, Math.hypot(Math.max(0, u - 0.55), Math.max(0, v - 0.55)) / 0.45)
-      const a = Math.max(0, 1 - d)
-      const i = (y * 128 + x) * 4
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255
-      img.data[i + 3] = Math.round(a * a * (3 - 2 * a) * 255)
+  const N = 128
+  const { c, g } = canvas(N, N)
+  const img = g.createImageData(N, N)
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const u = Math.abs((x + 0.5) / N - 0.5) * 2
+      const v = Math.abs((y + 0.5) / N - 0.5) * 2
+      const d = Math.min(1, Math.hypot(Math.max(0, u - 0.35), Math.max(0, v - 0.35)) / 0.65)
+      const a = 1 - d
+      const i = (y * N + x) * 4
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.round(a * a * (3 - 2 * a) * 255)
+      img.data[i + 3] = 255
     }
   }
   g.putImageData(img, 0, 0)
@@ -536,7 +542,8 @@ export interface Board {
 export async function buildBoard(opts: { mobile: boolean; dof: boolean; names: string[]; tagline: string; locale: string; yieldFn: () => Promise<void> }): Promise<Board> {
   const root = new THREE.Group()
   const parts = new Parts()
-  const silk = new SilkAtlas()
+  // phones: a 1024-wide silkscreen atlas (the 2048 one is the largest texture on a phone)
+  const silk = new SilkAtlas(opts.mobile ? 0.5 : 1)
   const r = rng(29)
 
   /* ---- the PCB itself */
@@ -692,7 +699,7 @@ export async function buildBoard(opts: { mobile: boolean; dof: boolean; names: s
   await opts.yieldFn()
 
   /* ---- the nine chips (placed like a pick-and-place machine) */
-  const nineBody = new THREE.InstancedMesh(new RoundedBoxGeometry(1.3, 0.2, 1.3, 1, 0.025), MAT.epoxy(), NR)
+  const nineBody = new THREE.InstancedMesh(new RoundedBoxGeometry(1.3, 0.2, 1.3, 1, 0.025), MATI.epoxy(), NR)
   const topGeo = new THREE.PlaneGeometry(1.24, 1.24)
   topGeo.rotateX(-Math.PI / 2)
   const cells = new Float32Array(NR * 2)
@@ -722,7 +729,7 @@ export async function buildBoard(opts: { mobile: boolean; dof: boolean; names: s
     }
   }
   const shadowTex = shadowTexture()
-  const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: shadowTex, transparent: true, opacity: 0.85, depthWrite: false })
+  const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: shadowTex, transparent: true, opacity: 0.9, depthWrite: false })
   const shadowGeo = new THREE.PlaneGeometry(1, 1)
   shadowGeo.rotateX(-Math.PI / 2)
   const nineShadows = new THREE.InstancedMesh(shadowGeo, shadowMat, NR)
@@ -784,7 +791,7 @@ export async function buildBoard(opts: { mobile: boolean; dof: boolean; names: s
 
   /* ---- contact shadows (displays, U1, cans) */
   const shadowList: THREE.Matrix4[] = []
-  for (let k = 0; k < NF; k++) shadowList.push(new THREE.Matrix4().compose(_p.set(modX(k), 0.004, DISP.z + 0.15), _q.identity(), _s.set(DISP.w + 1.4, 1, DISP.d + 1.4)))
+  for (let k = 0; k < NF; k++) shadowList.push(new THREE.Matrix4().compose(_p.set(modX(k), 0.004, DISP.z + 0.15), _q.identity(), _s.set(DISP.w + 2.0, 1, DISP.d + 2.0)))
   shadowList.push(new THREE.Matrix4().compose(_p.set(U1.x, 0.004, U1.z), _q.identity(), _s.set(U1.w + 0.9, 1, U1.w + 0.9)))
   for (const m of parts.cans) {
     const p = new THREE.Vector3().setFromMatrixPosition(m)
@@ -838,7 +845,7 @@ export async function buildBoard(opts: { mobile: boolean; dof: boolean; names: s
   ringGeo.rotateX(-Math.PI / 2)
   const holeGeo = new THREE.CircleGeometry(0.2, 24)
   holeGeo.rotateX(-Math.PI / 2)
-  const rings = new THREE.InstancedMesh(ringGeo, MAT.gold(), holes.length)
+  const rings = new THREE.InstancedMesh(ringGeo, MATI.gold(), holes.length)
   const pits = new THREE.InstancedMesh(holeGeo, new THREE.MeshBasicMaterial({ color: '#010102' }), holes.length)
   holes.forEach(([x, z], i) => {
     rings.setMatrixAt(i, _m.makeTranslation(x, 0.003, z))
@@ -853,7 +860,7 @@ export async function buildBoard(opts: { mobile: boolean; dof: boolean; names: s
     [NINE.x + 12.5, 16.2],
   ]
   const fidRing = new THREE.InstancedMesh(new THREE.CircleGeometry(0.17, 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#16191d', roughness: 0.3, metalness: 0.2 }), fids.length)
-  const fidDot = new THREE.InstancedMesh(new THREE.CircleGeometry(0.06, 20).rotateX(-Math.PI / 2), MAT.gold(), fids.length)
+  const fidDot = new THREE.InstancedMesh(new THREE.CircleGeometry(0.06, 20).rotateX(-Math.PI / 2), MATI.gold(), fids.length)
   fids.forEach(([x, z], i) => {
     fidRing.setMatrixAt(i, _m.makeTranslation(x, 0.0025, z))
     fidDot.setMatrixAt(i, _m.makeTranslation(x, 0.003, z))
@@ -893,10 +900,10 @@ export function placeNine(n: NineHandle, j: number, y: number) {
   const z = nineZ(j)
   _m.makeTranslation(NINE.x, 0.03 + y, z)
   n.bodies.setMatrixAt(j, _m)
-  n.tops.setMatrixAt(j, new THREE.Matrix4().makeTranslation(NINE.x, 0.03 + y + 0.201, z))
-  const base = new THREE.Matrix4().makeTranslation(NINE.x, y, z)
-  for (let i = 0; i < n.leadLocal.length; i++) n.leads.setMatrixAt(j * n.leadLocal.length + i, new THREE.Matrix4().multiplyMatrices(base, n.leadLocal[i]))
+  n.tops.setMatrixAt(j, _m.makeTranslation(NINE.x, 0.03 + y + 0.201, z))
+  _base.makeTranslation(NINE.x, y, z)
+  for (let i = 0; i < n.leadLocal.length; i++) n.leads.setMatrixAt(j * n.leadLocal.length + i, _m.multiplyMatrices(_base, n.leadLocal[i]))
   const spread = 1.9 + y * 0.9
-  n.shadows.setMatrixAt(j, new THREE.Matrix4().compose(_p.set(NINE.x + 0.05, 0.004, z + 0.05), _q.identity(), _s.set(spread, 1, spread)))
+  n.shadows.setMatrixAt(j, _m.compose(_p.set(NINE.x + 0.05, 0.004, z + 0.05), _q.identity(), _s.set(spread, 1, spread)))
   return true
 }

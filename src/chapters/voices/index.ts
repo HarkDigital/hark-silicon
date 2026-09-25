@@ -10,12 +10,14 @@ import './voices.css'
 
 /*
  * WAFER (voices) — a 300 mm wafer on a black vacuum chuck, shot like a
- * product macro. Eight of its dies are the clients': each carries their
- * initials in top metal and their company in tiny mono. A prober works
- * through them: the needles lift, the stage slides the wafer (a precise
- * move, a tiny fine-alignment step), the needles touch down on the pads, the
- * die powers up (green probe marks, a signal racing round its seal ring and
- * chip art) — and the client talks.
+ * product macro. Eight of its dies are the clients': each is still a die
+ * (its floorplan, pads and seal ring carry the frame), signed with the
+ * client's initials as small top-metal chip art in one corner and a mask-ID
+ * line in the scribe lane ('SQ · BELLVIEW WINERY'). A prober works through
+ * them: the needles lift, the stage slides the wafer (a precise move, a tiny
+ * fine-alignment step), the needles touch down on the pads, the die powers
+ * up (a signal racing round its seal ring, the bin dot lit — the only green
+ * on the die) — and the client talks.
  *
  *   0.000–0.088  intro: the whole wafer turning in the light (a diffraction
  *                rainbow sweeps it), "We listen. They talk."
@@ -462,8 +464,9 @@ export default function create(): Chapter {
   return {
     id: 'voices',
     group,
-    // keyboard stops land on each voice once the die is powered and the quote settled
-    anchors: CLIENTS.map((_, i) => bOf(i) + SPAN * 0.62),
+    // keyboard stops land on each voice once the die is powered, its seal ring
+    // traced and the quote settled (die 1 rests only briefly after the dive)
+    anchors: CLIENTS.map((_, i) => (i === 0 ? arriveOf(0) + 0.016 : bOf(i) + SPAN * 0.62)),
 
     async init(ctx: ChapterContext) {
       buildDom(ctx.stage)
@@ -539,7 +542,8 @@ export default function create(): Chapter {
       if (lit >= 0) {
         dieCentre(lit, cA)
         sig.group.position.set(cA.x, TOP + 0.0008, cA.y)
-        const reach = remap(local, arriveOf(lit) - 0.004, arriveOf(lit) + 0.03, 0, wafer.signalLen + 0.5)
+        // the pulse races once round the seal ring as the needles land
+        const reach = remap(local, arriveOf(lit) - 0.004, arriveOf(lit) + 0.014, 0, wafer.signalLen + 0.5)
         sig.set({
           time: tIdle,
           flow: rm ? 0.12 : 0.9,

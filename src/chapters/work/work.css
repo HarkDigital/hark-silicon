@@ -13,6 +13,25 @@
   pointer-events: none;
 }
 
+/* portrait pinout: the chip column runs on up under the chrome; a scrim keeps
+   its silkscreen from crowding the brand plate and Menu (opacity from JS) */
+.stage-work .wk-scrim {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--safe-top) + 30px);
+  background: linear-gradient(180deg, rgba(3, 4, 6, 0.96) 0%, rgba(3, 4, 6, 0.86) 58%, rgba(3, 4, 6, 0) 100%);
+  opacity: 0;
+  pointer-events: none;
+}
+@media (max-aspect-ratio: 10/9) {
+  .stage-work .wk-scrim {
+    display: block;
+  }
+}
+
 /* ---------------- intro ---------------- */
 
 .stage-work .wk-intro {
@@ -390,9 +409,9 @@
   }
 }
 
-/* phones (no backdrop blur): the panels go near-opaque so board silkscreen never ghosts through */
+/* phones (no backdrop blur): the panels go opaque so board silkscreen never ghosts through */
 .lowfx .stage-work .hud-panel {
-  background: rgba(8, 10, 13, 0.975);
+  background: #080a0d;
 }
 
 /* short landscape: the pinout folds into two columns of names */

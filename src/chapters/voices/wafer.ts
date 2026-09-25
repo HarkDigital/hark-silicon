@@ -13,15 +13,20 @@ import { TESTIMONIALS } from '../../content'
  *   physical material: every die is the same floorplan tile (sampled at full
  *   resolution in every cell, so the die under the probe is as sharp as the
  *   macro lens), scribe lanes and the bare-silicon edge ring are procedural,
- *   and eight dies carry a client's chip art (an overlay atlas: initials in
- *   top metal, the company in tiny mono, the probe marks). On top of the
+ *   and eight dies are the clients'. Each still reads as a DIE: the full
+ *   floorplan, with the client's initials as real chip-art — a small top-metal
+ *   signature in the near-left corner of the core (~14 % of the die) — and a
+ *   mask-ID line printed in the scribe lane in front of it
+ *   ('SQ · BELLVIEW WINERY', tiny mono, next to a few PCM test pads). An
+ *   overlay atlas carries both, plus the probe scrub marks. On top of the
  *   thin-film iridescence the die pattern DIFFRACTS: rainbow bands from two
  *   studio lights, placed by the grating equation, sweep as the wafer turns.
  *   The lens's shallow depth of field is a circle of confusion from each
  *   fragment's view depth turned into a texture-gradient scale (the die
  *   under the probe stays sharp, the rows in front and behind go soft; the
- *   focus drifts long mid-step and racks back in on arrival). Passed client
- *   dies keep a faint green seal ring and bin dot.
+ *   focus drifts long mid-step and racks back in on arrival). The only green
+ *   on a client die is its seal ring (pulses while powered, a faint steady
+ *   ring once passed) and its bin dot.
  *
  *   a cantilever probe card's needles (merged, tapered tungsten) converge on
  *   the pads of whichever die sits under the probe (the world origin); the
@@ -90,10 +95,23 @@ export const TIPS: [number, number, number][] = [
   ...[2, 5, 8, 11, 16, 19, 22, 25].map(i => [padT(i), PAD_IN, 0] as [number, number, number]),
   ...[3, 7, 11].flatMap(i => [[PAD_IN, padT(i), 1] as [number, number, number], [1 - PAD_IN, padT(i), 2] as [number, number, number]]),
 ]
-/** the chip-art field on a client die (normalised die coords) */
-export const ART = { x0: 0.12, y0: 0.16, x1: 0.88, y1: 0.8 }
+/**
+ * The chip-art signature on a client die (normalised die coords): a small
+ * keep-out in the near-left corner of the core (inside the power ring, clear
+ * of the needles, which all land on the far half), the initials in top metal.
+ */
+export const SIG = { x0: 0.1, y0: 0.745, x1: 0.33, y1: 0.905 }
 /** the bin mark (a green probe dot) */
 export const BIN = { x: 0.9, y: 0.1 }
+/**
+ * The mask-ID strip printed in the scribe lane in front of (+z) a client die,
+ * as a fraction of the die size. The lane is (P − D) / D ≈ 0.068 wide; the
+ * strip sits in its middle.
+ */
+const LANE_K = 1 / 16
+/** atlas rows: each client gets a die square (cs) and its lane strip (cs · LANE_K) under it */
+const ATLAS_AY = 1 / (2 * (1 + LANE_K))
+const ATLAS_LY = LANE_K / (2 * (1 + LANE_K))
 
 /* ------------------------------------------------------------- textures */
 
@@ -108,24 +126,36 @@ function fontsReady(): Promise<void> {
 }
 
 /**
- * The client overlay atlas: 4 × 2 cells, one per client die. Channels:
- * R = initials (top metal), G = fine art (frame, company, part number),
- * B = probe marks (lit green by the shader when the die is powered).
+ * The client overlay atlas: 4 × 2 rows, one per client die. Each row is the
+ * die square (cs × cs) with its scribe-lane strip (cs × cs·LANE_K) under it.
+ *   die square: R = the initials (top metal), G = fine metal (the
+ *               signature's corner ticks and part number), B = probe scrub
+ *               marks on the pads the needles touch
+ *   lane strip: G = the mask-ID line, R = PCM test pads and a vernier
+ * Painted additively on opaque black (read as data, not colour).
  */
 export function clientAtlas(clients: { name: string; company: string }[], cell: number): THREE.CanvasTexture {
+  // a multiple of 16 keeps the strip a whole number of pixels (the shader's ATLAS_* fractions stay exact)
+  const cs = Math.max(16, Math.round(cell / 16) * 16)
+  const ls = cs * LANE_K
+  const rh = cs + ls
   const cv = document.createElement('canvas')
-  cv.width = cell * 4
-  cv.height = cell * 2
+  cv.width = cs * 4
+  cv.height = rh * 2
   const g = cv.getContext('2d')!
   const tex = new THREE.CanvasTexture(cv)
   tex.colorSpace = THREE.NoColorSpace
   tex.anisotropy = 8
+  // one scratch layer for the slotted initials, reused by every cell
+  const layer = document.createElement('canvas')
+  layer.width = Math.ceil(cs * (SIG.x1 - SIG.x0))
+  layer.height = Math.ceil(cs * (SIG.y1 - SIG.y0))
   const draw = () => {
     g.globalCompositeOperation = 'source-over'
     g.fillStyle = '#000'
     g.fillRect(0, 0, cv.width, cv.height)
     g.globalCompositeOperation = 'lighter'
-    clients.forEach((c, k) => drawCell(g, (k % 4) * cell, Math.floor(k / 4) * cell, cell, c, k))
+    clients.forEach((c, k) => drawCell(g, layer, (k % 4) * cs, Math.floor(k / 4) * rh, cs, ls, c, k))
     tex.needsUpdate = true
   }
   draw()
@@ -133,88 +163,118 @@ export function clientAtlas(clients: { name: string; company: string }[], cell: 
   return tex
 }
 
-function drawCell(g: Ctx2D, x0: number, y0: number, cs: number, c: { name: string; company: string }, k: number) {
+const face = (px: number) => `700 ${px}px 'Space Grotesk Variable', system-ui, sans-serif`
+const mono = (px: number) => `500 ${px}px 'Martian Mono Variable', ui-monospace, monospace`
+
+function drawCell(g: Ctx2D, layer: HTMLCanvasElement, x0: number, y0: number, cs: number, ls: number, c: { name: string; company: string }, k: number) {
   g.save()
   g.translate(x0, y0)
-  // R — the initials, big, in top metal
+  g.beginPath()
+  g.rect(0, 0, cs, cs + ls)
+  g.clip()
   const ini = initials(c.name)
-  let fs = cs * 0.46
-  g.font = `700 ${fs}px 'Space Grotesk Variable', system-ui, sans-serif`
-  const w = g.measureText(ini).width
-  const maxW = cs * (ART.x1 - ART.x0) * 0.8
-  if (w > maxW) fs *= maxW / w
-  g.font = `700 ${fs}px 'Space Grotesk Variable', system-ui, sans-serif`
-  // drawn on their own layer so the wide metal can be slotted (as real top metal is)
-  const lc = document.createElement('canvas')
-  lc.width = lc.height = cs
-  const l = lc.getContext('2d')!
-  l.font = g.font
-  l.textAlign = 'center'
-  l.textBaseline = 'middle'
-  l.fillStyle = '#ff0000'
-  l.fillText(ini, cs * 0.5, cs * ((ART.y0 + ART.y1) / 2 + 0.01))
-  l.globalCompositeOperation = 'destination-out'
-  const sp = cs * 0.024
-  const sh = Math.max(1, cs * 0.0035)
-  l.globalAlpha = 0.55
-  for (let row = 0, y = cs * 0.2; y < cs * 0.8; y += sp, row++) {
-    for (let x = cs * 0.1 + (row % 2) * sp * 1.3; x < cs * 0.9; x += sp * 2.6) l.fillRect(x, y, sp * 1.7, sh)
-  }
-  g.drawImage(lc, 0, 0)
+  const sx0 = cs * SIG.x0
+  const sy0 = cs * SIG.y0
+  const sw = cs * (SIG.x1 - SIG.x0)
+  const sh = cs * (SIG.y1 - SIG.y0)
+  const inset = sw * 0.09
 
-  // G — dummy metal fill under the art, the frame (corner ticks), the company, a part number
-  const fx0d = cs * ART.x0
-  const fy0d = cs * ART.y0
-  const fp = Math.max(3, Math.round(cs * 0.012))
-  g.fillStyle = 'rgba(0,255,0,0.13)'
-  for (let y = fy0d + fp * 0.5; y < cs * ART.y1 - fp; y += fp)
-    for (let x = fx0d + fp * 0.5 + ((Math.round((y - fy0d) / fp) % 2) * fp) / 2; x < cs * ART.x1 - fp; x += fp) g.fillRect(x, y, fp * 0.5, fp * 0.5)
+  // R — the initials: a top-metal signature, ~14 % of the die, slotted as wide metal is
+  let fs = cs * 0.14
+  g.font = face(fs)
+  const maxW = sw - inset * 2
+  const w = g.measureText(ini).width
+  if (w > maxW) fs *= maxW / w
+  const l = layer.getContext('2d')!
+  l.globalCompositeOperation = 'source-over'
+  l.globalAlpha = 1
+  l.clearRect(0, 0, layer.width, layer.height)
+  l.font = face(fs)
+  l.textAlign = 'left'
+  l.textBaseline = 'alphabetic'
+  l.fillStyle = '#ff0000'
+  l.fillText(ini, inset, sh * 0.68)
+  l.globalCompositeOperation = 'destination-out'
+  l.globalAlpha = 0.55
+  const sp = Math.max(3, fs * 0.16)
+  const slot = Math.max(1, fs * 0.03)
+  for (let row = 0, y = sp * 0.5; y < sh; y += sp, row++) {
+    for (let x = (row % 2) * sp * 1.3; x < sw; x += sp * 2.6) l.fillRect(x, y, sp * 1.7, slot)
+  }
+  g.drawImage(layer, sx0, sy0)
+
+  // G — fine metal: corner ticks around the keep-out, a part number under the initials
   g.strokeStyle = '#00ff00'
   g.fillStyle = '#00ff00'
-  const lw = Math.max(1, cs * 0.0035)
+  const lw = Math.max(1, cs * 0.0032)
   g.lineWidth = lw
-  const fx0 = cs * ART.x0
-  const fy0 = cs * ART.y0
-  const fx1 = cs * ART.x1
-  const fy1 = cs * ART.y1
-  g.strokeRect(fx0 + lw / 2, fy0 + lw / 2, fx1 - fx0 - lw, fy1 - fy0 - lw)
-  const tick = cs * 0.035
-  g.lineWidth = lw * 2.2
-  for (const [x, y, sx, sy] of [
-    [fx0, fy0, 1, 1],
-    [fx1, fy0, -1, 1],
-    [fx0, fy1, 1, -1],
-    [fx1, fy1, -1, -1],
+  const tick = cs * 0.02
+  const h = lw / 2
+  for (const [x, y, dx, dy] of [
+    [sx0 + h, sy0 + h, 1, 1],
+    [sx0 + sw - h, sy0 + h, -1, 1],
+    [sx0 + h, sy0 + sh - h, 1, -1],
+    [sx0 + sw - h, sy0 + sh - h, -1, -1],
   ]) {
     g.beginPath()
-    g.moveTo(x, y + sy * tick)
+    g.moveTo(x, y + dy * tick)
     g.lineTo(x, y)
-    g.lineTo(x + sx * tick, y)
+    g.lineTo(x + dx * tick, y)
     g.stroke()
   }
-  const mono = (px: number) => `500 ${px}px 'Martian Mono Variable', ui-monospace, monospace`
-  let ts = cs * 0.04
-  g.font = mono(ts)
-  const co = c.company.toUpperCase()
-  const cw = g.measureText(co).width
-  if (cw > fx1 - fx0) ts *= (fx1 - fx0) / cw
-  g.font = mono(ts)
+  let ps = cs * 0.021
+  const part = `HK-${String(k + 1).padStart(2, '0')} REV A`
+  g.font = mono(ps)
+  const pw = g.measureText(part).width
+  if (pw > maxW) ps *= maxW / pw
+  g.font = mono(ps)
   g.textAlign = 'left'
   g.textBaseline = 'alphabetic'
-  g.fillText(co, fx0, cs * 0.868)
-  g.font = mono(cs * 0.03)
-  g.fillText(`HK-0N · ${String(k + 1).padStart(2, '0')}`, fx0, cs * 0.128)
-  g.textAlign = 'right'
-  g.fillText('REV A', cs * 0.8, cs * 0.128)
-  // a hair of fine metal under the name
-  g.fillRect(fx0, cs * 0.884, fx1 - fx0, lw)
+  g.fillText(part, sx0 + inset, sy0 + sh * 0.88)
 
-  // B — probe marks on the pads the needles touch (the bin dot is procedural)
+  // B — probe scrub marks on the pads the needles touch (the bin dot is procedural)
   g.fillStyle = '#0000ff'
-  for (const [ax, ay] of TIPS) {
+  for (const [ax, ay, side] of TIPS) {
     g.beginPath()
-    g.arc(ax * cs, ay * cs, cs * 0.011, 0, Math.PI * 2)
+    // a short scrub along the needle's travel
+    if (side === 0) g.ellipse(ax * cs, ay * cs, cs * 0.0055, cs * 0.009, 0, 0, Math.PI * 2)
+    else g.ellipse(ax * cs, ay * cs, cs * 0.009, cs * 0.0055, 0, 0, Math.PI * 2)
     g.fill()
+  }
+
+  // ---- the scribe-lane strip in front of the die ----
+  const ly = cs
+  // R — process-control test pads at the far end of the strip
+  g.fillStyle = '#ff0000'
+  const pp = Math.round(ls * 0.56)
+  const py = ly + Math.round((ls - pp) / 2)
+  const xr = cs * 0.975
+  for (let i = 0; i < 3; i++) g.fillRect(Math.round(xr - pp - i * pp * 1.55), py, pp, pp)
+  const padsL = xr - pp * 4.1
+  // G — the mask-ID line, left-aligned with the signature: 'SQ · BELLVIEW WINERY'
+  const id = `${ini} · ${c.company.toUpperCase()}`
+  const tx = sx0 + inset
+  let ts = ls * 0.6
+  g.font = mono(ts)
+  let tw = g.measureText(id).width
+  // a vernier between the name and the pads, when the name leaves room for one
+  const bar = Math.max(1, ls * 0.07)
+  const vW = bar * 16.6
+  const vR = padsL - pp * 0.8
+  const vernier = tx + tw + pp * 1.2 < vR - vW
+  const maxT = (vernier ? vR - vW : padsL) - pp * 1.2 - tx
+  if (tw > maxT) {
+    ts *= maxT / tw
+    tw = maxT
+  }
+  g.font = mono(ts)
+  g.textAlign = 'left'
+  g.textBaseline = 'middle'
+  g.fillStyle = '#00ff00'
+  g.fillText(id, tx, ly + ls * 0.53)
+  if (vernier) {
+    g.fillStyle = '#ff0000'
+    for (let i = 0; i < 7; i++) g.fillRect(vR - bar - i * bar * 2.6, ly + ls * (i === 3 ? 0.2 : 0.3), bar, ls * (i === 3 ? 0.6 : 0.4))
   }
   g.restore()
 }
@@ -305,6 +365,11 @@ varying vec3 vGz;
 const float HK_PITCH = ${f(P)};
 const float HK_HALF = ${f((0.5 * D) / P)};
 const float HK_RE = ${f(RE)};
+// the client atlas: a die square and its lane strip per row (fractions of the atlas height)
+const float HK_AY = ${f(ATLAS_AY)};
+const float HK_LY = ${f(ATLAS_LY)};
+// the lane strip's height in pitch units
+const float HK_LANE = ${f((LANE_K * D) / P)};
 vec3 hkHue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
 // visible spectrum: x 0 (violet) .. 1 (red), soft ends
 vec3 hkSpectrum(float x) {
@@ -347,13 +412,18 @@ const FRAG_MAP = /* glsl */ `
   float hkPat = 1.0 - smoothstep(HK_RE - hkAa * HK_PITCH, HK_RE + hkAa * HK_PITCH, hkR);
   float hkDie = hkIn * hkPat;
   vec3 hkTile = textureGrad(uTile, vec2(hkA.x, 1.0 - hkA.y), vec2(hkGx.x, -hkGx.y), vec2(hkGy.x, -hkGy.y)).rgb;
-  // ---- the client dies ----
+  // ---- the client dies, and the scribe lane in front of each ----
   float hkSel = -1.0;
+  float hkLSel = -1.0;
   float hkPow = 0.0;
   float hkPas = 0.0;
+  // the lane just in front of (+z) die (x, z) belongs to it: floor() picks that die for the lane's fragments
+  vec2 hkLId = vec2(hkId.x, floor(hkQ.y));
   for (int k = 0; k < 8; k++) {
     vec2 dd = abs(hkId - uClient[k]);
     float hit = 1.0 - step(0.25, max(dd.x, dd.y));
+    vec2 dl = abs(hkLId - uClient[k]);
+    hkLSel = mix(hkLSel, float(k), 1.0 - step(0.25, max(dl.x, dl.y)));
     hkSel = mix(hkSel, float(k), hit);
     hkPow += uPower[k] * hit;
     hkPas += uPass[k] * hit;
@@ -362,35 +432,60 @@ const FRAG_MAP = /* glsl */ `
   float hkK = max(hkSel, 0.0);
   vec2 hkCell = vec2(mod(hkK, 4.0), floor(hkK / 4.0));
   vec2 hkAc = clamp(hkA, 0.0, 1.0);
-  vec2 hkAuv = vec2((hkCell.x + hkAc.x) * 0.25, 1.0 - (hkCell.y + hkAc.y) * 0.5);
-  vec3 hkOv = textureGrad(uAtlas, hkAuv, vec2(hkGx.x * 0.25, -hkGx.y * 0.5), vec2(hkGy.x * 0.25, -hkGy.y * 0.5)).rgb * hkIsC;
-  float hkArt = hkBox(hkA, vec4(${f(ART.x0)}, ${f(ART.y0)}, ${f(ART.x1)}, ${f(ART.y1)}), 0.004 + hkAa * 0.5) * hkIsC;
-  // the letters stand proud: a lit rim on the far (light) side, a shadow on the near side
-  vec2 hkOff = vec2(0.004, 0.009) * 0.5;
-  vec2 hkGax = vec2(hkGx.x * 0.25, -hkGx.y * 0.5);
-  vec2 hkGay = vec2(hkGy.x * 0.25, -hkGy.y * 0.5);
-  float hkRf = textureGrad(uAtlas, hkAuv + vec2(-hkOff.x, hkOff.y), hkGax, hkGay).r * hkIsC;
-  float hkRn = textureGrad(uAtlas, hkAuv - vec2(-hkOff.x, hkOff.y), hkGax, hkGay).r * hkIsC;
+  vec2 hkAuv = vec2((hkCell.x + hkAc.x) * 0.25, 1.0 - hkCell.y * 0.5 - hkAc.y * HK_AY);
+  vec2 hkGax = vec2(hkGx.x * 0.25, -hkGx.y * HK_AY);
+  vec2 hkGay = vec2(hkGy.x * 0.25, -hkGy.y * HK_AY);
+  // (explicit gradients: the atlas is only fetched on the eight client dies and their lanes)
+  vec3 hkOv = vec3(0.0);
+  float hkRf = 0.0;
+  float hkRn = 0.0;
+  if (hkIsC > 0.0) {
+    hkOv = textureGrad(uAtlas, hkAuv, hkGax, hkGay).rgb * hkIsC;
+    // the letters stand proud: a lit rim on the far (light) side, a shadow on the near side
+    vec2 hkOff = vec2(0.0055 * 0.25, 0.0065 * HK_AY);
+    hkRf = textureGrad(uAtlas, hkAuv + vec2(-hkOff.x, hkOff.y), hkGax, hkGay).r * hkIsC;
+    hkRn = textureGrad(uAtlas, hkAuv - vec2(-hkOff.x, hkOff.y), hkGax, hkGay).r * hkIsC;
+  }
+  // the signature's keep-out (no dummy fill under chip art)
+  float hkSig = hkBox(hkA, vec4(${f(SIG.x0)}, ${f(SIG.y0)}, ${f(SIG.x1)}, ${f(SIG.y1)}), 0.003 + hkAa * 0.5) * hkIsC;
   float hkLet = hkOv.r;
   float hkRim = clamp(hkLet - hkRf, 0.0, 1.0);
   float hkShade = clamp(hkRf - hkLet, 0.0, 1.0) + clamp(hkLet - hkRn, 0.0, 1.0) * 0.5;
+  // the mask-ID strip (fades out with the lane itself once lanes go sub-pixel)
+  float hkLv = (fract(hkQ.y) - 0.5) / HK_LANE + 0.5;
+  float hkLk = max(hkLSel, 0.0);
+  vec2 hkLCell = vec2(mod(hkLk, 4.0), floor(hkLk / 4.0));
+  float hkLOn = step(-0.5, hkLSel) * step(0.0, hkLv) * step(hkLv, 1.0) * step(0.0, hkA.x) * step(hkA.x, 1.0) * (1.0 - hkIn) * hkPat;
+  vec2 hkLuv = vec2((hkLCell.x + hkAc.x) * 0.25, 1.0 - hkLCell.y * 0.5 - HK_AY - clamp(hkLv, 0.0, 1.0) * HK_LY);
+  vec2 hkGlx = vec2(hkGx.x * 0.25, -hkQx.y * hkS * (HK_LY / HK_LANE));
+  vec2 hkGly = vec2(hkGy.x * 0.25, -hkQy.y * hkS * (HK_LY / HK_LANE));
+  vec2 hkLane = vec2(0.0);
+  if (hkLOn > 0.0) hkLane = textureGrad(uAtlas, hkLuv, hkGlx, hkGly).rg * hkLOn;
+  float hkLM = max(hkLane.r, hkLane.g);
   // ---- colour: polished bare silicon, the floorplan, chip art in top metal ----
   vec3 hkCol = mix(vec3(0.32, 0.33, 0.35), hkTile, hkDie);
-  hkCol = mix(hkCol, hkTile * 0.3 + vec3(0.018, 0.016, 0.03), hkArt * 0.85);
+  hkCol = mix(hkCol, hkTile * 0.28 + vec3(0.016, 0.015, 0.026), hkSig * 0.9);
   hkCol = mix(hkCol, vec3(0.62, 0.61, 0.58), hkOv.g * 0.8);
+  // probe scrub marks: a dull bruise on the aluminium pads
+  hkCol *= 1.0 - hkOv.b * 0.45;
   hkCol = mix(hkCol, vec3(0.74, 0.75, 0.78), hkLet);
   hkCol = mix(hkCol, vec3(1.0), hkRim * 0.8);
   hkCol *= 1.0 - hkShade * 0.75;
+  // the lane: aluminium test pads and the mask-ID line on the bare silicon
+  hkCol = mix(hkCol, vec3(0.68, 0.69, 0.72), hkLane.r * 0.9);
+  hkCol = mix(hkCol, vec3(0.8, 0.8, 0.82), hkLane.g);
   diffuseColor.rgb *= hkCol;
 `
 
 const FRAG_ROUGH = /* glsl */ `
   roughnessFactor = mix(0.07, roughnessFactor, hkDie);
-  roughnessFactor = mix(roughnessFactor, 0.36, max(hkLet, hkArt * 0.5));
+  roughnessFactor = mix(roughnessFactor, 0.36, max(hkLet, hkSig * 0.5));
+  roughnessFactor = mix(roughnessFactor, 0.42, hkLM);
 `
 const FRAG_METAL = /* glsl */ `
   metalnessFactor = mix(0.9, metalnessFactor, hkDie);
   metalnessFactor = mix(metalnessFactor, 0.45, hkLet);
+  metalnessFactor = mix(metalnessFactor, 0.5, hkLM);
 `
 
 const FRAG_EMISSIVE = /* glsl */ `
@@ -410,10 +505,10 @@ const FRAG_EMISSIVE = /* glsl */ `
     float z1 = dot(h1, gZ);
     vec3 dif = hkOrders(x0) * exp(-z0 * z0 * 28.0) + hkOrders(z0) * exp(-x0 * x0 * 28.0);
     dif += (hkOrders(x1) * exp(-z1 * z1 * 40.0) + hkOrders(z1) * exp(-x1 * x1 * 40.0)) * 0.7;
-    float grate = hkDie * (1.0 - hkLet) * (1.0 - hkArt * 0.75) * (0.55 + 3.0 * dot(hkTile, vec3(0.3, 0.5, 0.2)));
+    float grate = hkDie * (1.0 - hkLet) * (1.0 - hkSig * 0.75) * (0.55 + 3.0 * dot(hkTile, vec3(0.3, 0.5, 0.2)));
     totalEmissiveRadiance += uDiff * dif * grate;
-    // the probe: lit pads on the powered die; the bin dot stays lit (quieter) once passed
-    totalEmissiveRadiance += uSignal * hkOv.b * hkPow * 4.0;
+    // the signal on a client die is only its bin dot and seal ring: the dot
+    // lights when the probe powers the die and stays lit (quieter) once passed
     float hkBe = hkAa / (2.0 * HK_HALF);
     float hkBin = (1.0 - smoothstep(0.02 - hkBe, 0.02 + hkBe, length(hkA - vec2(${f(BIN.x)}, ${f(BIN.y)})))) * hkIsC;
     totalEmissiveRadiance += uSignal * hkBin * (hkPow * 4.0 + hkPas * 1.6);
@@ -435,7 +530,7 @@ export interface Wafer {
   stage: THREE.Group
   top: THREE.Mesh
   uniforms: WaferUniforms
-  /** the seal-ring / chip-art signal on the powered die (child of stage) */
+  /** the seal-ring signal on the powered die (child of stage) */
   signal: Traces
   signalLen: number
 }
@@ -549,12 +644,12 @@ export async function buildWafer(o: { mobile: boolean; anisotropy: number }): Pr
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAG_EMISSIVE}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>\n${FRAG_IRID}`)
   }
-  topMat.customProgramCacheKey = () => 'hark-wafer-top-v1'
+  topMat.customProgramCacheKey = () => 'hark-wafer-top-v2'
   const edgeMat = new THREE.MeshStandardMaterial({ color: '#8a9098', metalness: 1, roughness: 0.16 })
   const top = new THREE.Mesh(geo, [topMat, edgeMat])
   stage.add(top)
 
-  // the signal on the powered die: around the seal ring and the chip-art frame
+  // the signal on the powered die: pulses round its seal ring (the only green on a client die, with the bin dot)
   const h = D / 2 - 0.006
   const ring = [
     new THREE.Vector3(-h, 0, -h),
@@ -563,15 +658,7 @@ export async function buildWafer(o: { mobile: boolean; anisotropy: number }): Pr
     new THREE.Vector3(-h, 0, h),
     new THREE.Vector3(-h, 0, -h + 0.0001),
   ]
-  const ax = (u: number) => (u - 0.5) * D
-  const art = [
-    new THREE.Vector3(ax(ART.x1), 0, ax(ART.y1)),
-    new THREE.Vector3(ax(ART.x0), 0, ax(ART.y1)),
-    new THREE.Vector3(ax(ART.x0), 0, ax(ART.y0)),
-    new THREE.Vector3(ax(ART.x1), 0, ax(ART.y0)),
-    new THREE.Vector3(ax(ART.x1), 0, ax(ART.y1) - 0.0001),
-  ]
-  const signal = new Traces([ring, art], { width: 0.009 })
+  const signal = new Traces([ring], { width: 0.009 })
   signal.copper.visible = false
   signal.group.position.y = TOP + 0.0008
   stage.add(signal.group)

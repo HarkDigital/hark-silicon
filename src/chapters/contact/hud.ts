@@ -42,6 +42,8 @@ export interface HudLayout {
   portrait: boolean
   /** free area for the board, CSS px */
   art: Rect
+  /** the band between the top and bottom chrome (--safe-top / --safe-bottom), CSS px */
+  safe: Rect
   panel: Rect
 }
 
@@ -222,5 +224,6 @@ export function measureHud(hud: Hud, W: number, H: number, allowFit = true): Hud
     const top = Math.max(band.top * 0.8, 56)
     art = { x0: band.left, x1: band.right, y0: top, y1: Math.max(top + 90, panel.y0 - gap) }
   }
-  return { W, H, portrait, art, panel }
+  const safe = { x0: band.left, y0: band.top, x1: band.right, y1: band.bottom }
+  return { W, H, portrait, art, safe, panel }
 }

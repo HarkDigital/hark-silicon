@@ -70,25 +70,52 @@ function patchRaw(m: THREE.ShaderMaterial): THREE.ShaderMaterial {
 
 /**
  * Patch every mesh / line material under `root`. Materials in `shared` (the
- * kit's cached MAT.* instances, used by other chapters too) are cloned first;
- * everything else belongs to this chapter and is patched in place, so live
- * references (Traces uniforms, LED lenses) keep working.
+ * kit's cached MAT.* / MATI.* instances, used by other chapters too) are
+ * cloned first; everything else belongs to this chapter and is patched in
+ * place, so live references (Traces uniforms, LED lenses) keep working.
+ *
+ * Patched materials are keyed by material + instanced: an InstancedMesh never
+ * shares a material with a plain Mesh (three would re-resolve the program on
+ * every draw), so a material drawn by both kinds gets its own instanced clone.
+ * Instanced meshes are converted first, so those clones are taken from the
+ * pristine material, before any in-place patch.
  */
 export function applyFocus(root: THREE.Object3D, shared: Set<THREE.Material>) {
-  const done = new Map<THREE.Material, THREE.Material>()
-  const conv = (m: THREE.Material): THREE.Material => {
-    let c = done.get(m)
-    if (c) return c
-    const src = shared.has(m) ? m.clone() : m
-    if ((src as THREE.ShaderMaterial).isShaderMaterial) c = patchRaw(src as THREE.ShaderMaterial)
-    else c = patchBuiltin(src, src.blending === THREE.AdditiveBlending ? 'add' : src.transparent ? 'alpha' : 'opaque')
-    done.set(m, c)
-    return c
-  }
+  const inst: THREE.Mesh[] = []
+  const plain: THREE.Mesh[] = []
+  const drawnPlain = new Set<THREE.Material>()
   root.traverse(o => {
     const mesh = o as THREE.Mesh
     if (!(mesh.isMesh || (o as THREE.LineSegments).isLineSegments) || (o as THREE.Sprite).isSprite) return
-    if (Array.isArray(mesh.material)) mesh.material = mesh.material.map(conv)
-    else if (mesh.material) mesh.material = conv(mesh.material)
+    if ((mesh as THREE.InstancedMesh).isInstancedMesh) inst.push(mesh)
+    else {
+      plain.push(mesh)
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) if (m) drawnPlain.add(m)
+    }
   })
+  const done = new Map<string, THREE.Material>()
+  const conv = (m: THREE.Material, instanced: boolean): THREE.Material => {
+    const key = `${m.uuid}:${instanced ? 'i' : 'm'}`
+    let c = done.get(key)
+    if (c) return c
+    const own = !shared.has(m) && !(instanced && drawnPlain.has(m))
+    let src = m
+    if (!own) {
+      src = m.clone()
+      // a raw shader's live uniforms (time, reach…) stay shared with the original
+      if ((m as THREE.ShaderMaterial).isShaderMaterial) (src as THREE.ShaderMaterial).uniforms = (m as THREE.ShaderMaterial).uniforms
+    }
+    if ((src as THREE.ShaderMaterial).isShaderMaterial) c = patchRaw(src as THREE.ShaderMaterial)
+    else c = patchBuiltin(src, src.blending === THREE.AdditiveBlending ? 'add' : src.transparent ? 'alpha' : 'opaque')
+    done.set(key, c)
+    return c
+  }
+  for (const [list, instanced] of [
+    [inst, true],
+    [plain, false],
+  ] as const)
+    for (const mesh of list) {
+      if (Array.isArray(mesh.material)) mesh.material = mesh.material.map(m => conv(m, instanced))
+      else if (mesh.material) mesh.material = conv(mesh.material, instanced)
+    }
 }

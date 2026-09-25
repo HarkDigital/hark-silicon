@@ -165,8 +165,13 @@
 .stage-services .sd-blurb {
   max-width: 42ch;
 }
-/* content settles on the panel floor: shorter items leave air under the header, not a hole above the index */
-.stage-services .sd-item > :first-child {
+/* items read from the top, straight under the header; the 01–11 index is
+   pinned to the panel floor, so a shorter block leaves air above the index,
+   never a hole under the header */
+.stage-services .sd-item {
+  justify-content: flex-start;
+}
+.stage-services .sd-foot {
   margin-top: auto;
 }
 .stage-services .sd-blurb,
@@ -187,6 +192,12 @@
 }
 .stage-services .sd-item.is-on .sd-tags {
   transition-delay: 0.26s;
+}
+
+/* phones (html.lowfx: no backdrop blur): the panel goes near-opaque so the
+   die's labels and floorplan never ghost through the copy */
+.lowfx .stage-services .sd-card {
+  background: rgba(8, 10, 13, 0.975);
 }
 
 /* 01–11: tiny die blocks; the lit one is a signal pad, visited ones keep a trace */

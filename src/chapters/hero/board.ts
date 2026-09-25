@@ -230,99 +230,186 @@ function drawMark(g: CanvasRenderingContext2D, cx: number, cy: number, size: num
 const MONO = "'Martian Mono Variable', ui-monospace, monospace"
 const GROT = "'Space Grotesk Variable', system-ui, sans-serif"
 
+type RGB = readonly [number, number, number]
+/** a speck: colour + alpha, blended over the base */
+type Speck = readonly [number, number, number, number]
+
+/** one lid layer: the base tile, then flat fills for the moulding marks and the etch */
+interface LidLayer {
+  base: RGB
+  speck: (r: number) => Speck
+  etch: string
+  /** the laser raster (every other row blended over the etch), or none */
+  raster: string | null
+  dimple: string
+  eject: string
+}
+
+/**
+ * EDM mould texture as one seamless T² tile: 1–2 px specks alpha-blended over
+ * the base with typed-array writes (one putImageData). Every layer uses the
+ * same seed, so a speck sits at the same spot in the albedo, roughness and
+ * bump — a pit that is darker is also rougher.
+ */
+function speckTile(base: RGB, speck: (r: number) => Speck, T = 256): HTMLCanvasElement {
+  const { c, g } = canvas(T, T)
+  const img = g.createImageData(T, T)
+  const d = img.data
+  for (let i = 0; i < T * T * 4; i += 4) {
+    d[i] = base[0]
+    d[i + 1] = base[1]
+    d[i + 2] = base[2]
+    d[i + 3] = 255
+  }
+  const R = rng(11)
+  const n = Math.round(T * T * 0.035)
+  for (let k = 0; k < n; k++) {
+    const [r, gg, b, a] = speck(R())
+    const s = R() < 0.8 ? 1 : 2
+    const x0 = Math.floor(R() * T)
+    const y0 = Math.floor(R() * T)
+    for (let dy = 0; dy < s; dy++)
+      for (let dx = 0; dx < s; dx++) {
+        // wraps, so the tile repeats without a seam
+        const i = (((y0 + dy) % T) * T + ((x0 + dx) % T)) * 4
+        d[i] += (r - d[i]) * a
+        d[i + 1] += (gg - d[i + 1]) * a
+        d[i + 2] += (b - d[i + 2]) * a
+      }
+  }
+  g.putImageData(img, 0, 0)
+  return c
+}
+
+/** the etch fill: flat, or with the laser's raster rows (a tiny repeating pattern) */
+function etchFill(g: CanvasRenderingContext2D, etch: string, raster: string | null, period: number): string | CanvasPattern {
+  if (!raster) return etch
+  const { c, g: p } = canvas(1, period)
+  p.fillStyle = etch
+  p.fillRect(0, 0, 1, period)
+  p.fillStyle = raster
+  p.fillRect(0, period - 1, 1, 1)
+  return g.createPattern(c, 'repeat') ?? etch
+}
+
+/**
+ * Paint one lid layer at N²: the speck tile as a pattern, the ejector-pin marks
+ * and the pin-1 dimple, then the laser etch (mark + lines) filled directly —
+ * no per-speck draws and no mask canvas.
+ */
+function paintLid(g: CanvasRenderingContext2D, N: number, L: LidLayer, tile: HTMLCanvasElement) {
+  g.globalCompositeOperation = 'source-over'
+  g.fillStyle = g.createPattern(tile, 'repeat') ?? `rgb(${L.base.join(',')})`
+  g.fillRect(0, 0, N, N)
+  // ejector-pin marks (shallow polished circles) and the pin-1 dimple
+  g.fillStyle = L.eject
+  for (const [x, y] of [[0.86, 0.14], [0.14, 0.86], [0.86, 0.86]] as P2[]) {
+    g.beginPath()
+    g.arc(x * N, y * N, N * 0.045, 0, Math.PI * 2)
+    g.fill()
+  }
+  g.fillStyle = L.dimple
+  g.beginPath()
+  g.arc(0.1 * N, 0.1 * N, N * 0.032, 0, Math.PI * 2)
+  g.fill()
+  // the laser etch
+  g.fillStyle = etchFill(g, L.etch, L.raster, N >= 2048 ? 3 : 2)
+  drawMark(g, N * 0.5, N * 0.38, N * 0.4)
+  g.fill('evenodd')
+  g.textAlign = 'center'
+  g.textBaseline = 'alphabetic'
+  g.font = `600 ${Math.round(N * 0.084)}px ${GROT}`
+  g.fillText('HARK-1', N * 0.5, N * 0.71)
+  g.font = `500 ${Math.round(N * 0.04)}px ${MONO}`
+  g.fillText('MAKE THE INTERNET LISTEN', N * 0.5, N * 0.786)
+  g.font = `500 ${Math.round(N * 0.032)}px ${MONO}`
+  g.fillText('HK-0N  ·  REV A  ·  PHL', N * 0.5, N * 0.842)
+}
+
+/* the three layers of the lid. Albedo: dark satin compound, light-grey etch */
+const LID_ALBEDO: LidLayer = {
+  base: [20, 22, 25],
+  speck: r => (r < 0.5 ? [40, 43, 48, 0.35 + r * 0.3] : [8, 9, 11, 0.35 + r * 0.3]),
+  etch: '#b9bdc2',
+  raster: 'rgba(70,74,80,0.35)',
+  dimple: '#0d0e10',
+  eject: '#18191c',
+}
+/* roughness: the etch is matte (laser-frosted), the compound a satin */
+const LID_ROUGH: LidLayer = {
+  base: [138, 138, 138],
+  speck: r => (r < 0.5 ? [170, 170, 170, 0.5] : [110, 110, 110, 0.5]),
+  etch: '#e6e6e6',
+  raster: 'rgba(200,200,200,0.6)',
+  dimple: '#3a3a3a',
+  eject: '#5c5c5c',
+}
+/* bump: the etch is recessed, so its edges catch a grazing key */
+const LID_BUMP: LidLayer = {
+  base: [255, 255, 255],
+  speck: () => [236, 236, 236, 0.6],
+  etch: '#8c8c8c',
+  raster: null,
+  dimple: '#404040',
+  eject: '#e8e8e8',
+}
+
 /**
  * The lid of U1: laser-etched mark and lines on EDM-textured mould compound.
- * Three maps from one layout: albedo, roughness and a bump (the etch is
- * recessed, so its edges catch a grazing key).
+ * Two textures: the albedo (also the emissive map, so the etch keeps a faint
+ * self-luminance), and roughness + bump packed into one (three reads the bump
+ * from R and roughness from G). Returns a redraw for when the etch fonts land.
+ * Once the final paint is on the GPU the canvases are released (a lost context
+ * reloads the page, so they are never needed again).
  */
-function lidMaterial(size: number): THREE.MeshStandardMaterial {
+function lidMaterial(size: number, packSize: number, final: boolean): { material: THREE.MeshStandardMaterial; redraw: () => void } {
   const albedo = canvas(size, size)
-  const rough = canvas(size, size)
-  const bump = canvas(size, size)
+  const packed = canvas(packSize, packSize)
+  const tiles = { a: speckTile(LID_ALBEDO.base, LID_ALBEDO.speck), r: speckTile(LID_ROUGH.base, LID_ROUGH.speck), b: speckTile(LID_BUMP.base, LID_BUMP.speck) }
   const draw = () => {
-    const N = size
-    const R = rng(11)
-    const layout = (g: CanvasRenderingContext2D, base: string, speck: (r: number) => string, etch: string, dimple: string, eject: string, raster: string | null) => {
-      g.globalCompositeOperation = 'source-over'
-      g.fillStyle = base
-      g.fillRect(0, 0, N, N)
-      // EDM mould texture: fine specks
-      const n = Math.round(N * N * 0.035)
-      for (let i = 0; i < n; i++) {
-        g.fillStyle = speck(R())
-        const s = R() < 0.8 ? 1 : 2
-        g.fillRect(R() * N, R() * N, s, s)
-      }
-      // ejector-pin marks (shallow polished circles) and the pin-1 dimple
-      g.fillStyle = eject
-      for (const [x, y] of [[0.86, 0.14], [0.14, 0.86], [0.86, 0.86]] as P2[]) {
-        g.beginPath()
-        g.arc(x * N, y * N, N * 0.045, 0, Math.PI * 2)
-        g.fill()
-      }
-      g.fillStyle = dimple
-      g.beginPath()
-      g.arc(0.1 * N, 0.1 * N, N * 0.032, 0, Math.PI * 2)
-      g.fill()
-      // the laser etch: mark + lines, drawn as a mask then filled with a raster
-      const etchLayer = canvas(N, N)
-      const e = etchLayer.g
-      e.fillStyle = '#fff'
-      drawMark(e, N * 0.5, N * 0.39, N * 0.4)
-      e.fill('evenodd')
-      e.textAlign = 'center'
-      e.textBaseline = 'alphabetic'
-      e.font = `600 ${Math.round(N * 0.078)}px ${GROT}`
-      e.fillText('HARK-1', N * 0.5, N * 0.715)
-      e.font = `500 ${Math.round(N * 0.034)}px ${MONO}`
-      e.fillText('MAKE THE INTERNET LISTEN', N * 0.5, N * 0.785)
-      e.fillText('HK-0N  ·  REV A  ·  PHL', N * 0.5, N * 0.84)
-      e.globalCompositeOperation = 'source-in'
-      e.fillStyle = etch
-      e.fillRect(0, 0, N, N)
-      if (raster) {
-        // laser raster lines
-        e.fillStyle = raster
-        for (let y = 0; y < N; y += 3) e.fillRect(0, y, N, 1)
-      }
-      g.drawImage(etchLayer.c, 0, 0)
-    }
-    layout(
-      albedo.g,
-      '#141619',
-      r => `rgba(${r < 0.5 ? '40,43,48' : '8,9,11'},${0.35 + r * 0.3})`,
-      '#c6cacf',
-      '#0d0e10',
-      '#18191c',
-      'rgba(60,64,70,0.5)',
-    )
-    layout(rough.g, '#8a8a8a', r => `rgba(${r < 0.5 ? '170,170,170' : '110,110,110'},0.5)`, '#e6e6e6', '#3a3a3a', '#5c5c5c', 'rgba(200,200,200,0.6)')
-    layout(bump.g, '#ffffff', () => 'rgba(236,236,236,0.6)', '#8c8c8c', '#404040', '#e8e8e8', null)
+    paintLid(albedo.g, size, LID_ALBEDO, tiles.a)
+    // pack: bump → red, roughness → green (each painted grey, then multiplied into
+    // its channel; the two are added)
+    const N = packSize
+    const p = packed.g
+    paintLid(p, N, LID_BUMP, tiles.b)
+    p.globalCompositeOperation = 'multiply'
+    p.fillStyle = '#ff0000'
+    p.fillRect(0, 0, N, N)
+    const tmp = canvas(N, N)
+    paintLid(tmp.g, N, LID_ROUGH, tiles.r)
+    tmp.g.globalCompositeOperation = 'multiply'
+    tmp.g.fillStyle = '#00ff00'
+    tmp.g.fillRect(0, 0, N, N)
+    p.globalCompositeOperation = 'lighter'
+    p.drawImage(tmp.c, 0, 0)
+    p.globalCompositeOperation = 'source-over'
+    // release the scratch canvas's backing store now, not at the next GC
+    tmp.c.width = tmp.c.height = 0
   }
   draw()
-  const mk = (c: HTMLCanvasElement, srgb: boolean) => {
-    const t = new THREE.CanvasTexture(c)
-    if (srgb) t.colorSpace = THREE.SRGBColorSpace
-    t.anisotropy = 8
-    return t
-  }
-  const map = mk(albedo.c, true)
-  const roughnessMap = mk(rough.c, false)
-  const bumpMap = mk(bump.c, false)
+  const map = new THREE.CanvasTexture(albedo.c)
+  map.colorSpace = THREE.SRGBColorSpace
+  map.anisotropy = 8
+  const pack = new THREE.CanvasTexture(packed.c)
+  pack.anisotropy = 8
   // the etch reads as light-grey laser marking under any light: a faint self-luminance
   // through the albedo (the dark mould compound stays dark)
-  const m = new THREE.MeshStandardMaterial({ map, roughnessMap, bumpMap, bumpScale: 1.4, roughness: 1, metalness: 0, emissiveMap: map, emissive: new THREE.Color('#a3a7ad') })
-  // redraw once the etch fonts are in
-  const fonts = document.fonts
-  if (fonts) {
-    Promise.all([fonts.load(`600 40px ${GROT}`), fonts.load(`500 40px ${MONO}`)])
-      .then(() => {
-        draw()
-        map.needsUpdate = roughnessMap.needsUpdate = bumpMap.needsUpdate = true
-      })
-      .catch(() => {})
+  const material = new THREE.MeshStandardMaterial({ map, roughnessMap: pack, bumpMap: pack, bumpScale: 1.4, roughness: 1, metalness: 0, emissiveMap: map, emissive: new THREE.Color('#6a6e74') })
+  const release = (t: THREE.Texture) => {
+    if (!final) return
+    const c = t.image as HTMLCanvasElement
+    c.width = c.height = 1
+    t.onUpdate = null
   }
-  return m
+  map.onUpdate = release
+  pack.onUpdate = release
+  const redraw = () => {
+    final = true
+    draw()
+    map.needsUpdate = pack.needsUpdate = true
+  }
+  return { material, redraw }
 }
 
 /** small canvas texture with text (crystal lid stamp, etc.) */
@@ -408,6 +495,11 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
   const root = new THREE.Group()
   const R = rng(20160)
   const glints: BokehSource[] = []
+  // the lid's etch faces: asked for now (they're usually in by the time the lid is painted)
+  const fonts = document.fonts
+  const fontsIn = fonts ? Promise.all([fonts.load(`600 40px ${GROT}`), fonts.load(`500 40px ${MONO}`)]).then(() => true, () => true) : Promise.resolve(true)
+  let fontsReady = !fonts
+  void fontsIn.then(() => (fontsReady = true))
 
   // ---- materials (chapter-owned; DOF-patched)
   // matte black solder mask: a broad, dim satin sheen. Out of focus it fades to
@@ -435,6 +527,11 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
   }
   const ceramicMat = withDof(MAT.ceramic().clone())
   const shadowMat = withDof(new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: shadowTex(), transparent: true, opacity: 0.85, depthWrite: false }), 'alpha')
+  // an InstancedMesh never shares a material with a plain Mesh (three would re-resolve
+  // the program on every alternation): instanced twins of the shared ones
+  const twin = <M extends THREE.Material>(m: M): M => withDof(m.clone() as M)
+  const goldMatI = twin(goldMat)
+  const shadowMatI = twin(shadowMat)
 
   // ---- the board: a big matte-black plane (edges live far off in the dark)
   const board = new THREE.Mesh(new THREE.PlaneGeometry(60, 46), maskMat)
@@ -443,15 +540,13 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
   board.renderOrder = -1
   root.add(board)
 
-  // ---- U1: the Hark chip
-  const chip = chipPackage({ w: CHIP_W, h: CHIP_H, kind: 'qfp', pinsPerSide: PINS, lines: [], mark: false })
+  // ---- U1: the Hark chip (the kit body + leads; the etched lid is ours, painted last)
+  const chip = chipPackage({ w: CHIP_W, h: CHIP_H, kind: 'qfp', pinsPerSide: PINS, top: false })
   chip.position.y = LIFT
-  const lidMat = withDof(lidMaterial(mobile ? 1024 : 2048))
-  const top = chip.userData.top as THREE.Mesh
-  const oldTop = top.material as THREE.MeshStandardMaterial
-  oldTop.map?.dispose()
-  oldTop.dispose()
-  top.material = lidMat
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(CHIP_W * 0.96, CHIP_W * 0.96).rotateX(-Math.PI / 2))
+  top.position.y = LID_Y - LIFT + 0.001
+  top.userData.noDof = true
+  chip.add(top)
   root.add(chip)
   const shadowGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
   const chipShadow = new THREE.Mesh(shadowGeo, shadowMat)
@@ -464,7 +559,7 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
   const padGeo = new THREE.BoxGeometry(PAD_OUT - PAD_IN, 0.004, PITCH * 0.58)
   padGeo.translate((PAD_IN + PAD_OUT) / 2, 0.002, 0)
   const fillGeo = mergeGeometries([wedge(HALF + 0.04, HALF + 0.1, 0.0, 0.05, PITCH * 0.4), wedge(HALF + 0.2, HALF + 0.265, 0.024, 0.0, PITCH * 0.44)])!
-  const u1Pads = new THREE.InstancedMesh(padGeo, goldMat, PINS * 4)
+  const u1Pads = new THREE.InstancedMesh(padGeo, goldMatI, PINS * 4)
   const u1Fill = new THREE.InstancedMesh(fillGeo, solderMat, PINS * 4)
   {
     const m = new THREE.Matrix4()
@@ -820,7 +915,7 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
     padMat.roughness = 0.3
     padMat.transparent = true
     const pads = new THREE.InstancedMesh(pgeo, withDof(padMat, 'alpha'), n * 2)
-    const shadows = new THREE.InstancedMesh(shadowGeo, shadowMat, n)
+    const shadows = new THREE.InstancedMesh(shadowGeo, shadowMatI, n)
     shadows.renderOrder = 1
     const m = new THREE.Matrix4()
     const q = new THREE.Quaternion()
@@ -952,7 +1047,6 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
   root.add(traces.group)
 
   // kit parts (U1 body/leads, U4, U5) get DOF-patched clones of their shared materials
-  top.userData.noDof = true
   dofTree(chip)
   // U1's leads: satin tin, so a key near the mirror angle spreads into a sheen, not a pinpoint
   chip.traverse(o => {
@@ -985,6 +1079,14 @@ export async function buildHero(mobile: boolean): Promise<HeroSet> {
   root.add(bokehFar.mesh)
   const bokeh = new Bokeh(glints)
   root.add(bokeh.mesh)
+
+  // ---- U1's etched lid, painted last: by now the etch faces are usually in, so it
+  // paints once (otherwise it repaints — cheaply — when they land; never waits)
+  await nextFrame()
+  const lid = lidMaterial(mobile ? 1024 : 2048, 1024, fontsReady)
+  const lidMat = withDof(lid.material)
+  top.material = lidMat
+  if (!fontsReady) void fontsIn.then(() => lid.redraw())
 
   const maxLen = Math.max(...traces.lengths)
   return {

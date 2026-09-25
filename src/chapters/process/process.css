@@ -48,6 +48,10 @@
 .stage-process .pc-rev {
   color: var(--fg-faint);
 }
+/* the results row sits straight on the lit stainless bench (no panel): muted, not faint (4.5:1+) */
+.stage-process .pc-specs-top .pc-rev {
+  color: var(--fg-muted);
+}
 
 /* the four steps share one cell; the active one clocks in */
 .stage-process .pc-steps {

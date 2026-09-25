@@ -11,15 +11,16 @@ import * as THREE from 'three'
  *   top-left   the Hark mark + board name (silkscreen)
  *   left       U3 (SPI flash) → U1 on a 4-line bus; Y1 (crystal) → U1
  *   centre     U1, the Hark chip (QFP-64)
- *   top-right  U4 (sensor) → U1; U1 → four status LEDs D2–D5
+ *   top-right  U4 (sensor) → U1; the status row: D1 PWR, then U1 → D2–D5
  *   right      U5 → U1; C1 bulk can; U2 regulator
- *   front      J1 USB-C (power in), D1 PWR, J2 1×6 header + "SAY HELLO · email"
+ *   front      J1 USB-C (power in), J2 1×6 header + "SAY HELLO · email"
  *
  * Nets carry a network START (in "front" units: where along the power-on
  * sequence they begin) and a RATE (front units per cm), so one scroll-driven
- * uniform can light the whole board in order: VBUS first, then the power
- * plane (a ring spreading from the regulator), then every input converging
- * on U1 at the same instant, then U1's outputs racing to the LEDs.
+ * uniform can light the whole board in order: VBUS and the PWR LED first,
+ * then every input converging on U1 at the same instant, then U1's outputs
+ * racing to the status LEDs. The copper stays copper: only the arriving
+ * signal (and the pulses behind it) is light.
  */
 
 export type V2 = THREE.Vector2
@@ -39,6 +40,8 @@ const U1_SPAN = U1_PITCH * (U1N - 1)
 /** QFP pads under the gull-wing feet: from half+0.06 to half+0.26 */
 export const U1_PAD_IN = U1_HALF + 0.06
 export const U1_PAD_OUT = U1_HALF + 0.26
+/** top of U1's lid (kit qfp: body lifted 0.05 on its leads, 0.18 tall) */
+export const U1_LID_Y = 0.05 + 0.18 + 0.001
 const U1_ESC = U1_HALF + 0.42
 
 /**
@@ -69,11 +72,14 @@ export const J2_PIN0 = v(-4.9, 2.7) // 1×6 header, 2.54 mm pitch along +x
 export const J2_PITCH = 0.254
 export const C1C = v(4.95, -0.62) // electrolytic can
 export const PLANE_ORIGIN = v(4.55, 0.62) // the regulator's output vias: the power plane lights from here
+/** D2–D5 (U1's status outputs) */
 export const LED_X = [3.2, 3.6, 4.0, 4.4]
 export const LED_Z = -2.78
 export const RLED_Z = -2.18
-export const D1C = v(4.66, 3.15)
-export const R1C = v(4.22, 3.15)
+/** D1 · PWR: first in the status row, behind U1 (in frame with the lid in the opening) */
+export const D1C = v(2.72, LED_Z)
+/** where D1's feed drops from the inner 3V3 layer */
+export const D1_VIA = v(2.72, -1.5)
 export const HOLES = [v(-5.05, -3.15), v(5.05, -3.15), v(-5.05, 3.15), v(5.05, 3.15)]
 export const HOLE_R = 0.16
 export const TESTPOINTS: { p: V2; label: string; left?: boolean }[] = [
@@ -104,11 +110,11 @@ export const PASSIVES: Passive[] = [
   P(-3.5, -1.02, 0, '0402', 'c'),
   P(2.18, -2.55, Math.PI / 2, '0402', 'c'),
   P(2.98, -0.1, Math.PI / 2, '0402', 'c'),
-  // LED resistors
+  // LED resistors (R1 for D1 PWR, then D2–D5's)
+  P(D1C.x, RLED_Z, Math.PI / 2, '0402', 'r'),
   ...LED_X.map(x => P(x, RLED_Z, Math.PI / 2, '0402', 'r')),
-  // power: ferrite on VBUS, PWR LED resistor, bulk caps, USB CC resistors
+  // power: ferrite on VBUS, bulk caps, USB CC resistors
   P(4.35, 2.45, 0, '0805', 'f'),
-  P(R1C.x, R1C.y, 0, '0402', 'r'),
   P(5.12, 2.05, Math.PI / 2, '0805', 'c'),
   P(5.12, 0.92, Math.PI / 2, '0805', 'c'),
   P(2.72, 2.42, Math.PI / 2, '0402', 'r'),
@@ -214,7 +220,7 @@ export function pathLength(pts: V2[]) {
 /** The sequence, in front units. */
 export const SEQ = {
   /** the PWR LED lights as soon as VBUS is live */
-  pwr: 0.25,
+  pwr: 0.4,
   /** the regulator's output: the power plane starts spreading here */
   plane: 2.9,
   /** plane ring speed (cm per front unit) */
@@ -257,9 +263,9 @@ export function buildLayout(): Layout {
   // ---- VBUS: J1 → F1 → U2 input (the first thing to light)
   const vbus = chamfer([v(3.52, 2.9), v(3.52, 2.45), v(4.8, 2.45), v(4.8, 1.72)], 0.18)
   nets.push({ pts: vbus, w: PWR, start: 0, rate: 1, kind: 1 })
-  // VBUS → R1 → D1 (PWR)
-  const pwrLed = chamfer([v(3.9, 2.45), v(3.9, 3.15), v(D1C.x - 0.05, 3.15)], 0.14)
-  nets.push({ pts: pwrLed, w: 0.07, start: 0.38, rate: 0.5, kind: 1 })
+  // 3V3 (inner layer) → R1 → D1 PWR: the first light on the board
+  const pwrLed = [D1_VIA.clone(), v(D1C.x, LED_Z + 0.06)]
+  nets.push({ pts: pwrLed, w: 0.07, start: SEQ.pwr - pathLength(pwrLed) * 0.3, rate: 0.3, kind: 1 })
   // 3V3 out of the regulator tab into the plane vias, and on to TP1
   nets.push({ pts: [v(4.55, 1.0), v(4.55, 0.62)], w: 0.2, start: SEQ.plane - 0.4, rate: 1, kind: 1 })
   nets.push({ pts: [v(4.55, 0.82), v(3.72, 0.82)], w: PWR, start: SEQ.plane - 0.2, rate: 1, kind: 1 })
@@ -320,7 +326,7 @@ export function buildLayout(): Layout {
     nets.push({ pts, w: SIG, start: SEQ.outputs + j * 0.12, rate: SEQ.outRate, kind: 0 })
   }
 
-  // ---- LED on times
+  // ---- LED on times (D1 when its feed arrives, then D2–D5)
   const ledOn = [SEQ.pwr]
   for (let j = 0; j < 4; j++) {
     const n = nets[nets.length - 4 + j]
@@ -338,7 +344,6 @@ export function buildLayout(): Layout {
   const blocked = (p: V2) => {
     if (HOLES.some(h => h.distanceTo(p) < 0.55)) return true
     if (p.x > 2.6 && p.x < 4.05 && p.y > 2.55) return true // J1
-    if (p.x > 3.95 && p.y > 2.8) return true // D1 / R1
     if (p.x > 4.6 && p.y > -1.1 && p.y < 2.4) return true // C1 / C3 / C4
     if (p.x < -3.3 && p.y > 2.4 && p.y < 3.3) return true // J2 labels
     if (FIDUCIALS.some(f => f.distanceTo(p) < 0.3)) return true
@@ -374,6 +379,7 @@ export function buildLayout(): Layout {
   // misc
   vias.push(v(-2.55, -1.84), v(-2.3, -1.84), v(-3.1, -1.02), v(2.18, -2.9), v(3.28, -0.1), v(4.55, 1.95), v(3.08, 2.62), v(2.72, 2.12), v(2.95, 2.12))
   vias.push(v(1.9, 0.7), v(2.1, 0.55), v(-2.2, 0.8), v(-2.4, 0.95))
+  vias.push(D1_VIA.clone())
 
   return { nets, stubs, vias, ledOn }
 }

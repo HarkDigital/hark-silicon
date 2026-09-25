@@ -369,6 +369,8 @@ export async function buildDie(renderer: THREE.WebGLRenderer, mobile: boolean): 
   }
 
   // ---------------- leadframe fingers, bond wires, ball + stitch bonds
+  // goldI / tinI are INSTANCED-ONLY materials (the kit's MATI rule): never
+  // hand them to a plain Mesh, or three re-resolves the program every draw
   const goldI = new THREE.MeshStandardMaterial({ color: '#c99a42', roughness: 0.36, metalness: 1 })
   // out of focus, gold highlights spread: roughen with defocus (same lens as the die)
   goldI.onBeforeCompile = sh => {

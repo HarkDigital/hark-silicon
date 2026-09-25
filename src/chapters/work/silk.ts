@@ -30,11 +30,16 @@ interface QuadItem {
 }
 type Item = TextItem | QuadItem
 
+/** atlas width and glyph size at scale 1 (desktop); phones use half (a 1024-wide atlas) */
+const ATLAS_W = 2048
 const FONT_PX = 72
 const CELL_PAD = 6
 
 export class SilkAtlas {
   private items: Item[] = []
+
+  /** @param scale atlas resolution: 1 = 2048 wide, 0.5 = 1024 wide (phones) */
+  constructor(private scale = 1) {}
 
   text(s: string, x: number, z: number, o: { h?: number; rot?: number; align?: Align; weight?: number } = {}) {
     this.items.push({ kind: 'text', s, x, z, h: o.h ?? 0.24, rot: o.rot ?? 0, align: o.align ?? 'left', weight: o.weight ?? 500 })
@@ -90,10 +95,12 @@ export class SilkAtlas {
 
   build(color: THREE.ColorRepresentation = '#e6e6df'): THREE.Mesh {
     const probe = document.createElement('canvas').getContext('2d')!
-    const fontOf = (w: number) => `${w} ${FONT_PX}px 'Martian Mono Variable', ui-monospace, monospace`
+    const fontPx = Math.round(FONT_PX * this.scale)
+    const pad = Math.max(2, Math.round(CELL_PAD * this.scale))
+    const fontOf = (w: number) => `${w} ${fontPx}px 'Martian Mono Variable', ui-monospace, monospace`
     // measure + shelf-pack
-    const W = 2048
-    const cellH = Math.ceil(FONT_PX * 1.3)
+    const W = Math.round(ATLAS_W * this.scale)
+    const cellH = Math.ceil(fontPx * 1.3)
     type Placed = { item: TextItem; x: number; y: number; w: number }
     const placed: Placed[] = []
     let cx = 0
@@ -101,7 +108,7 @@ export class SilkAtlas {
     for (const it of this.items) {
       if (it.kind !== 'text') continue
       probe.font = fontOf(it.weight)
-      const w = Math.min(W - 2 * CELL_PAD, Math.ceil(probe.measureText(it.s).width) + 2 * CELL_PAD)
+      const w = Math.min(W - 2 * pad, Math.ceil(probe.measureText(it.s).width) + 2 * pad)
       if (cx + w > W) {
         cx = 0
         cy += cellH
@@ -128,7 +135,7 @@ export class SilkAtlas {
     g.textBaseline = 'middle'
     for (const p of placed) {
       g.font = fontOf(p.item.weight)
-      g.fillText(p.item.s, p.x + CELL_PAD, p.y + cellH / 2)
+      g.fillText(p.item.s, p.x + pad, p.y + cellH / 2)
     }
     const tex = new THREE.CanvasTexture(cv)
     tex.colorSpace = THREE.SRGBColorSpace
@@ -157,7 +164,7 @@ export class SilkAtlas {
     }
     for (const p of placed) {
       const it = p.item
-      const scale = it.h / FONT_PX // cm per px
+      const scale = it.h / fontPx // cm per px
       const qw = p.w * scale
       const qh = cellH * scale
       const ox = it.align === 'left' ? 0 : it.align === 'center' ? -qw / 2 : -qw

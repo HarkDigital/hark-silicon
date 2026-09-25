@@ -378,6 +378,16 @@
   }
 }
 
+/* the heading's focus pill (the copy layer's Tab stop) sits low on narrow screens,
+   where most chapters keep their copy high; here the panel owns the bottom, so the
+   pill goes back over the scene instead of covering the colophon */
+@media (max-width: 767px) and (orientation: portrait), (max-width: 767px) and (min-height: 501px), (max-aspect-ratio: 9/10) {
+  #contact .sr-copy h2:focus {
+    top: calc(var(--safe-top) + 8px);
+    bottom: auto;
+  }
+}
+
 @media (max-width: 480px) {
   .stage-contact .pw-panel {
     padding: 18px 18px 14px;
@@ -547,9 +557,11 @@
   }
 }
 
-/* phones / scaled-down devices: no backdrop-filter over the canvas */
+/* phones / scaled-down devices: no backdrop-filter over the canvas, so the
+   panel goes near-opaque (the board's 'SAY HELLO' silk must never ghost
+   through behind the heading) */
 .lowfx .stage-contact .pw-panel {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: rgba(9, 11, 14, 0.93);
+  background: rgba(8, 10, 13, 0.975);
 }

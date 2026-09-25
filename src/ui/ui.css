@@ -379,6 +379,9 @@
   height: var(--c-h);
   padding: 0 5px 0 13px;
 }
+.ch-bottom > .ch-sw {
+  flex: none;
+}
 .ch-sw-ref {
   margin-right: 5px;
   padding-right: 11px;
@@ -459,13 +462,19 @@
 /* J2: the readout + seven header pins on a copper trace */
 .ch-read {
   display: grid;
+  /* may shrink (the line ellipsizes) rather than run off the screen */
+  grid-template-columns: minmax(0, auto);
   justify-items: end;
   gap: 4px;
+  min-width: 0;
   padding: 8px 9px 6px 14px;
 }
 .ch-read-line {
+  max-width: 100%;
   margin: 0;
   padding-right: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: var(--font-mono);
   font-size: 10.5px;
   line-height: 16px;
@@ -478,6 +487,7 @@
   font-weight: 600;
   color: var(--paper);
 }
+.ch-read.is-cue .ch-read-n,
 .ch-read.is-cue .ch-read-k {
   color: var(--signal);
 }
@@ -599,6 +609,57 @@
   border-radius: 50%;
   background: #eafff3;
   box-shadow: 0 0 6px 1px rgba(0, 255, 133, 0.9);
+}
+
+/* Read as a page: the last chrome Tab stop, hidden until focused (a skip-link
+   pattern), then a plate standing on J2. Tiny viewports show it in place of
+   SW1 and J2 (below). */
+.ch-rp {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 14px 0 13px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--paper);
+  text-decoration: none;
+}
+.ch-rp:not(:focus) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.ch-rp:focus-visible {
+  outline-offset: -2px;
+}
+.ch-rp-ic {
+  flex: none;
+  width: 12px;
+  height: 14px;
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1;
+}
+.ch-rp:hover,
+.ch-rp:focus-visible,
+.ch-menu-read:hover,
+.ch-menu-read:focus-visible {
+  color: var(--signal);
+}
+.ch-rp:hover .ch-rp-ic,
+.ch-rp:focus-visible .ch-rp-ic,
+.ch-menu-read:hover .ch-rp-ic,
+.ch-menu-read:focus-visible .ch-rp-ic {
+  stroke: var(--signal);
 }
 
 /* ---------------- pick-and-place: the plates drop in with a tiny settle ---------------- */
@@ -819,10 +880,30 @@
   padding-left: 11px;
 }
 .ch-menu-mail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
   margin: 4px 0 0;
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;
+}
+.ch-menu-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 24px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper);
+  text-decoration: none;
+}
+.ch-menu-read span {
+  text-decoration: underline;
+  text-decoration-color: rgba(217, 168, 74, 0.7);
+  text-underline-offset: 4px;
 }
 .ch-menu-mail a {
   color: var(--paper);
@@ -1019,6 +1100,56 @@
   }
   .ch-ml-name {
     font-size: 24px;
+  }
+  .ch-read .ch-read-line {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .ch-read .ch-pins {
+    flex: none;
+  }
+}
+
+/* narrow: J2 drops its index ("07 / 07 · "); the chapter names stay */
+@media (max-width: 400px), (orientation: landscape) and (max-height: 500px) and (max-width: 760px) {
+  .ch-read-n {
+    display: none;
+  }
+}
+/* narrower still: SW1 keeps its switches and names, the knob shows the state
+   (aria-pressed carries it for assistive tech) */
+@media (max-width: 350px), (orientation: landscape) and (max-height: 500px) and (max-width: 700px) {
+  .ch-bottom {
+    gap: 8px;
+  }
+  .ch-bottom .ch-tgl-st {
+    display: none;
+  }
+  .ch-bottom > .ch-read {
+    padding-left: 8px;
+  }
+}
+/* tiny (a desktop at 300-400% zoom): the story's panels cannot reflow this
+   small, so the chrome offers the page instead: Read as a page takes the
+   place of SW1 and J2 (Menu keeps the switches and the chapters) */
+@media (max-width: 400px) and (max-height: 420px), (orientation: landscape) and (max-height: 500px) and (max-width: 600px) {
+  .ch-bottom {
+    justify-content: flex-end;
+  }
+  .ch-bottom > .ch-sw,
+  .ch-bottom > .ch-read {
+    display: none;
+  }
+  .ch-rp,
+  .ch-rp:not(:focus) {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    height: var(--c-h);
+    padding: 0 14px 0 13px;
+    overflow: visible;
+    clip-path: none;
   }
 }
 
@@ -1487,6 +1618,36 @@ html.no-webgl #gl {
 .fb :focus-visible {
   outline: 2px solid var(--fb-ink);
   outline-offset: 3px;
+}
+/* ?read: the way back to the 3D story */
+.fb-back {
+  margin: 0 0 26px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.fb-back a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 14px 0 12px;
+  color: #f2f3ef;
+  background: var(--fb-ink);
+  border-radius: 2px;
+  text-decoration: none;
+}
+.fb-back i {
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-bottom: 1.6px solid #00ff85;
+  border-left: 1.6px solid #00ff85;
+  transform: rotate(45deg);
+}
+.fb-back a:hover {
+  color: #00ff85;
 }
 .fb-head {
   display: flex;

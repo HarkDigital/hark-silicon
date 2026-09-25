@@ -13,7 +13,9 @@ import * as THREE from 'three'
  * Transparent things (signal pulses, LED glows, contact shadows) draw after
  * the veil; the pulse shader applies the same circle of confusion itself.
  * Desktop only (the transmission pass renders the opaque scene again at half
- * resolution).
+ * resolution). In-focus fragments discard before any lighting or transmission
+ * work (their alpha would be < 0.005 anyway), and the chapter hides the veil
+ * when the engine sheds effects (html.lowfx).
  */
 
 export interface DofUniforms {
@@ -52,23 +54,26 @@ export function createVeil(u: DofUniforms, x0: number, z0: number, x1: number, z
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u)
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uFocus, uBand, uAmount;\nfloat wkCoc = 0.0;\n${COC_GLSL}`)
+      .replace('#include <common>', `#include <common>\nuniform float uFocus, uBand, uAmount;\n${COC_GLSL}`)
       .replace(
-        '#include <roughnessmap_fragment>',
-        /* glsl */ `
-        float roughnessFactor = roughness;
+        '#include <clipping_planes_fragment>',
+        /* glsl */ `#include <clipping_planes_fragment>
+        // circle of confusion of the board under this fragment: follow the ray on down
+        float wkCoc;
         {
           float dv = length(vWorldPosition - cameraPosition);
-          // follow the ray on down to the board under the veil
           float t = cameraPosition.y / max(cameraPosition.y - vWorldPosition.y, 0.05);
           wkCoc = wkCocAt(dv * clamp(t, 1.0, 1.6));
-          roughnessFactor = clamp(wkCoc, 0.04, 0.42);
         }
+        // in focus the veil fades to alpha < 0.005 anyway: skip the whole
+        // physical-transmission fragment there (most of the frame)
+        if (wkCoc < 0.002) discard;
         `,
       )
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = clamp(wkCoc, 0.04, 0.42);')
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a *= smoothstep(0.0, 0.05, wkCoc);')
   }
-  mat.customProgramCacheKey = () => 'wk-veil-v1'
+  mat.customProgramCacheKey = () => 'wk-veil-v2'
   const mesh = new THREE.Mesh(geo, mat)
   mesh.position.set((x0 + x1) / 2, y, (z0 + z1) / 2)
   mesh.renderOrder = 1

@@ -2,6 +2,7 @@ import { BRAND } from '../content'
 import { holdInert, releaseInert } from './inert'
 import { MARK_PATHS } from './mark'
 import { mountRotateGate } from './rotate'
+import { readMotion } from './motion'
 
 /*
  * Boot screen: the Hark chip powers on.
@@ -25,7 +26,8 @@ import { mountRotateGate } from './rotate'
  * Rules: shows at least ~1.2 s, never hangs (every wait is a timer, never an
  * animation or a frame callback, so a background tab still finishes), the
  * page behind is inert while it's up, and skip (?nointro) removes it at once.
- * Reduced motion: the same boot, but the exit is a quiet fade.
+ * Reduced motion (or Motion switched off earlier this session): the same
+ * boot, but the exit is a quiet fade.
  *
  * The log and the board are decorative (aria-hidden); a polite status line
  * says "Loading Hark Digital Design".
@@ -162,7 +164,8 @@ export function createLoader(root: HTMLElement, { skip = false } = {}) {
     return { progress() {}, finish: () => Promise.resolve() }
   }
 
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  // reduced motion, or the visitor turned Motion off earlier this session
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches || !readMotion(true)
   root.innerHTML = `
   <div class="ld${reduced ? ' is-reduced' : ''}">
     <p class="sr-only" role="status">Loading ${BRAND.name}</p>

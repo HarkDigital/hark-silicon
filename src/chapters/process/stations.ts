@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { MAT, S, Traces, chipPackage, dieMaterial, route, silk, smdField } from '../../kit/silicon'
+import { MAT, MATI, S, Traces, chipPackage, dieMaterial, route, silk, smdField } from '../../kit/silicon'
 import { clamp, ease, lerp, rng, segment, smoothstep } from '../../core/math'
-import { benchTexture, boardSilkTexture, maskTexture, scopeTexture, softDisc, softRect, waferTexture, type BoardLayout } from './textures'
+import { benchTexture, boardSilkTexture, curtainMask, maskTexture, scopeTexture, softDisc, softRect, waferTexture, type BoardLayout } from './textures'
 
 /*
  * THE FAB — four stations on a perforated stainless laminar-flow bench, each
@@ -28,18 +28,49 @@ import { benchTexture, boardSilkTexture, maskTexture, scopeTexture, softDisc, so
 
 const UP = new THREE.Vector3(0, 1, 0)
 
-/** Chapter-local materials (instanced meshes never share a material with plain meshes). */
+/**
+ * Chapter-local materials. Instanced meshes never share a material with plain
+ * meshes (three re-resolves the program on every draw): the *I entries are
+ * for InstancedMesh only.
+ */
 function localMats() {
+  const nickel = new THREE.MeshStandardMaterial({ color: '#b9bcc1', roughness: 0.34, metalness: 1 })
+  const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1)
+  white.needsUpdate = true
+  const shadows = new Map<string, THREE.MeshBasicMaterial>()
+  const masks = new Map<string, THREE.CanvasTexture>()
+  /** one soft mask texture per shape (the stations reuse the same few) */
+  const mask = (key: string, make: () => THREE.CanvasTexture) => {
+    let t = masks.get(key)
+    if (!t) masks.set(key, (t = make()))
+    return t
+  }
   return {
     anod: new THREE.MeshStandardMaterial({ color: '#17191d', roughness: 0.4, metalness: 0.75 }),
     matte: new THREE.MeshStandardMaterial({ color: '#1b1d21', roughness: 0.62, metalness: 0.45 }),
-    nickel: new THREE.MeshStandardMaterial({ color: '#b9bcc1', roughness: 0.34, metalness: 1 }),
+    nickel,
+    nickelI: nickel.clone(),
     tungsten: new THREE.MeshStandardMaterial({ color: '#c9ccd1', roughness: 0.2, metalness: 1 }),
     goldI: new THREE.MeshStandardMaterial({ color: S.gold, roughness: 0.22, metalness: 1 }),
     brass: new THREE.MeshStandardMaterial({ color: '#b38b48', roughness: 0.3, metalness: 1 }),
     siliconEdge: new THREE.MeshStandardMaterial({ color: '#4a4a55', roughness: 0.25, metalness: 0.8 }),
-    shadow: (tex: THREE.Texture, opacity: number) =>
-      new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: tex, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+    /**
+     * a flat white alphaMap: the clear transparent parts (quartz, dielectric)
+     * wear it so they share ONE program with the masked ones (chrome, silk)
+     */
+    clear: white,
+    disc: (size = 128, hard = 0) => mask(`d${size}:${hard}`, () => softDisc(size, hard)),
+    rect: (w: number, h: number, feather: number) => mask(`r${w}x${h}:${feather}`, () => softRect(w, h, feather)),
+    /** a baked contact shadow (black through a soft mask); shared per mask + opacity */
+    shadow: (tex: THREE.Texture, opacity: number) => {
+      const key = `${tex.uuid}:${opacity}`
+      let m = shadows.get(key)
+      if (!m) {
+        m = new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: tex, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+        shadows.set(key, m)
+      }
+      return m
+    },
   }
 }
 type Mats = ReturnType<typeof localMats>
@@ -233,7 +264,7 @@ export function buildProbe(o: { mobile: boolean; die: THREE.CanvasTexture }): Pr
   // a tidy ring of 0402 decoupling caps between the traces and the pogo pads
   const NC = 24
   const capBody = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: '#8a7358', roughness: 0.55 }), NC)
-  const capEnds = new THREE.InstancedMesh(new THREE.BoxGeometry(0.022, 0.052, 0.052), M.nickel, NC * 2)
+  const capEnds = new THREE.InstancedMesh(new THREE.BoxGeometry(0.022, 0.052, 0.052), M.nickelI, NC * 2)
   let nc = 0
   for (let i = 0; i < NC; i++) {
     const th = ((i + 0.5) / NC) * Math.PI * 2 + 0.03
@@ -259,19 +290,17 @@ export function buildProbe(o: { mobile: boolean; die: THREE.CanvasTexture }): Pr
   pin1.position.set(2.95, CARD_T + 0.003, 0.25)
   head.add(pin1)
 
-  // contact: a green point of light on each pad once the needles land
-  const dotGeo = new THREE.CircleGeometry(0.018, 10).rotateX(-Math.PI / 2)
-  const dotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(S.signal).multiplyScalar(3), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
-  const dots = new THREE.InstancedMesh(dotGeo, dotMat, pads.length)
-  pads.forEach((p, i) => {
-    m4.makeTranslation(p.x, TOP + 0.003, p.z)
-    dots.setMatrixAt(i, m4)
-  })
+  // contact: a soft green point of light on each pad once the needles land
+  // (static: one merged mesh sharing the light pools' program)
+  const dotGeos = pads.map(p => new THREE.PlaneGeometry(0.064, 0.064).rotateX(-Math.PI / 2).translate(p.x, TOP + 0.003, p.z))
+  const dotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(S.signal).multiplyScalar(3), alphaMap: M.disc(64, 0.36), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  const dots = new THREE.Mesh(mergeGeometries(dotGeos)!, dotMat)
+  dotGeos.forEach(d => d.dispose())
   dots.renderOrder = 3
   g.add(dots)
 
   // a soft green light pool on the die while it's being measured
-  const poolMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(S.signal), alphaMap: softDisc(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  const poolMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(S.signal), alphaMap: M.disc(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
   const pool = flat(3.6, 3.6, poolMat, TOP + 0.004)
   pool.renderOrder = 3
   g.add(pool)
@@ -343,7 +372,7 @@ export function buildProbe(o: { mobile: boolean; die: THREE.CanvasTexture }): Pr
   g.add(scope)
 
   // baked contact shadows
-  const disc = softDisc(128, 0.55)
+  const disc = M.disc(128, 0.55)
   const sh1 = flat(18.5, 18.5, M.shadow(disc, 0.7), 0.003)
   const sh2 = flat(3.4, 3.4, M.shadow(disc, 0.6), 0.003)
   sh2.position.set(scope.position.x, 0.003, scope.position.z)
@@ -453,10 +482,14 @@ export function buildLitho(o: { mobile: boolean }): LithoStation {
   g.add(edge, wafer)
 
   // the photomask: chrome on the underside of a quartz plate
-  const chrome = flat(L, L, new THREE.MeshStandardMaterial({ color: '#dfe2e7', metalness: 1, roughness: 0.26, alphaMap: maskTex, transparent: true, side: THREE.DoubleSide }), MASK_B + 0.004)
+  // (front side only: the camera is always above it; a double-sided transparent
+  // surface would draw twice and build a second program)
+  const chrome = flat(L, L, new THREE.MeshStandardMaterial({ color: '#dfe2e7', metalness: 1, roughness: 0.26, alphaMap: maskTex, transparent: true }), MASK_B + 0.004)
   chrome.renderOrder = 1
-  const faceMat = new THREE.MeshPhysicalMaterial({ color: '#dbe8ea', metalness: 0, roughness: 0.05, transparent: true, opacity: 0.07, clearcoat: 0.5, clearcoatRoughness: 0.08, envMapIntensity: 0.9, depthWrite: false })
-  const edgeMat = new THREE.MeshStandardMaterial({ color: '#a8d4cb', metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.55, depthWrite: false })
+  // (standard, not physical: at 7% opacity a clearcoat layer is invisible, and
+  // this shares the program of the plate edges and the stack's dielectric)
+  const faceMat = new THREE.MeshStandardMaterial({ color: '#dbe8ea', alphaMap: M.clear, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.07, envMapIntensity: 1.35, depthWrite: false })
+  const edgeMat = new THREE.MeshStandardMaterial({ color: '#a8d4cb', alphaMap: M.clear, metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.55, depthWrite: false })
   const plate = new THREE.Mesh(new THREE.BoxGeometry(PLATE, MASK_T - MASK_B, PLATE), [edgeMat, edgeMat, faceMat, faceMat, edgeMat, edgeMat])
   plate.position.y = (MASK_B + MASK_T) / 2
   plate.renderOrder = 2
@@ -497,37 +530,20 @@ export function buildLitho(o: { mobile: boolean }): LithoStation {
   g.add(bar)
 
   // the light: a curtain from the slit down to the wafer, a band on the mask
-  const sheetU = { uI: { value: 0 } }
+  // (a masked MeshBasic, faded at its sides and toward the wafer: it shares
+  // the program of the pools, shadows and the band; the camera is always in front)
   const sheetH = RAIL_Y + 0.09 - TOP
-  const sheet = new THREE.Mesh(
-    new THREE.PlaneGeometry(L + 0.3, sheetH),
-    new THREE.ShaderMaterial({
-      uniforms: sheetU,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-      side: THREE.DoubleSide,
-      vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: /* glsl */ `
-        uniform float uI; varying vec2 vUv;
-        void main() {
-          float x = 1.0 - smoothstep(0.42, 0.5, abs(vUv.x - 0.5));
-          float y = 0.35 + 0.65 * vUv.y;
-          gl_FragColor = vec4(vec3(0.82, 0.92, 1.0) * x * y * y * 0.055 * uI, 1.0);
-        }
-      `,
-    }),
-  )
+  const sheetMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.82, 0.92, 1.0).multiplyScalar(0.055), alphaMap: curtainMask(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(L + 0.3, sheetH), sheetMat)
   sheet.position.y = TOP + sheetH / 2
   sheet.renderOrder = 4
-  const bandMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#eaf6ff').multiplyScalar(1.1), alphaMap: softRect(256, 64, 0.3), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  const bandMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#eaf6ff').multiplyScalar(1.1), alphaMap: M.rect(256, 64, 0.3), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
   const band = flat(L + 0.4, 0.9, bandMat, MASK_T + 0.003)
   band.renderOrder = 4
   g.add(sheet, band)
 
-  const disc = softDisc(128, 0.55)
-  const rect = softRect(256, 256, 0.14)
+  const disc = M.disc(128, 0.55)
+  const rect = M.rect(256, 256, 0.14)
   g.add(flat(14, 14, M.shadow(disc, 0.7), 0.003), flat(17, 17, M.shadow(rect, 0.45), 0.002))
 
   return {
@@ -539,7 +555,7 @@ export function buildLitho(o: { mobile: boolean }): LithoStation {
       sheet.position.z = z
       band.position.z = z
       const live = on * smoothstep(0, 0.04, sweep) * (1 - smoothstep(0.96, 1, sweep))
-      sheetU.uI.value = live
+      sheetMat.opacity = live
       bandMat.opacity = 0.16 * live
       slitMat.color.set('#f4fbff').multiplyScalar(0.6 + 3.4 * live)
       wu.uSweep.value = z
@@ -561,13 +577,26 @@ export interface StackStation {
   update(o: { rise: number[]; glow: number; time: number; flow: number }): void
 }
 
-/** Copper with signal pulses racing along its length (per-instance phase). */
-function pulseCopper(axis: 'x' | 'z') {
-  const u = { uTime: { value: 0 }, uGlow: { value: 0 }, uFlow: { value: 4 }, uSig: { value: new THREE.Color(S.signal) } }
-  const mat = new THREE.MeshStandardMaterial({ color: '#c47a42', metalness: 0.9, roughness: 0.34, transparent: true })
+const AXIS_X = new THREE.Vector3(1, 0, 0)
+const AXIS_Z = new THREE.Vector3(0, 0, 1)
+
+/**
+ * Instanced metal with signal pulses racing along `axis` (per-instance
+ * phase). Every layer's tracks and vias share ONE program: the axis is a
+ * uniform, and the vias are the same shader with the glow left at 0.
+ */
+function pulseCopper(axis: 'x' | 'z', o: { color?: THREE.ColorRepresentation; roughness?: number; metalness?: number } = {}) {
+  const u = {
+    uTime: { value: 0 },
+    uGlow: { value: 0 },
+    uFlow: { value: 4 },
+    uSig: { value: new THREE.Color(S.signal) },
+    uAxis: { value: axis === 'x' ? AXIS_X : AXIS_Z },
+  }
+  const mat = new THREE.MeshStandardMaterial({ color: o.color ?? '#c47a42', metalness: o.metalness ?? 0.9, roughness: o.roughness ?? 0.34, transparent: true })
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u)
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vAlong; varying float vSeed; varying float vTop;').replace(
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uAxis; varying float vAlong; varying float vSeed; varying float vTop;').replace(
       '#include <project_vertex>',
       `#include <project_vertex>
       vec4 pw = vec4(transformed, 1.0);
@@ -577,7 +606,7 @@ function pulseCopper(axis: 'x' | 'z') {
       #else
         vSeed = 0.0;
       #endif
-      vAlong = (modelMatrix * pw).${axis};
+      vAlong = dot((modelMatrix * pw).xyz, uAxis);
       vTop = normal.y;`,
     )
     sh.fragmentShader = sh.fragmentShader
@@ -591,7 +620,7 @@ function pulseCopper(axis: 'x' | 'z') {
         totalEmissiveRadiance += uSig * pulse * (0.3 + 1.5 * smoothstep(0.5, 0.9, vTop)) * uGlow;`,
       )
   }
-  mat.customProgramCacheKey = () => `fab-pulse-${axis}`
+  mat.customProgramCacheKey = () => 'fab-pulse'
   return { mat, u }
 }
 
@@ -690,14 +719,15 @@ export function buildStack(o: { die: THREE.CanvasTexture }): StackStation {
           vias.push(new THREE.Matrix4().compose(new THREE.Vector3(px, -h, pz), new THREE.Quaternion(), new THREE.Vector3(w, h, w)))
         }
     }
-    const via = new THREE.MeshStandardMaterial({ color: '#b8ada0', roughness: 0.42, metalness: 0.9, transparent: true })
+    // tungsten plugs: the tracks' program with no pulses (uGlow stays 0)
+    const via = pulseCopper('x', { color: '#b8ada0', roughness: 0.42, metalness: 0.9 }).mat
     if (vias.length) {
       const vm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), via, vias.length)
       vias.forEach((m, i) => vm.setMatrixAt(i, m))
       grp.add(vm)
     }
     // the inter-layer dielectric this layer sits on: a faint glass plate with lit edges
-    const ild = new THREE.MeshStandardMaterial({ color: '#d7e0e6', transparent: true, opacity: 0.08, roughness: 0.12, metalness: 0.1, depthWrite: false })
+    const ild = new THREE.MeshStandardMaterial({ color: '#d7e0e6', alphaMap: M.clear, transparent: true, opacity: 0.08, roughness: 0.12, metalness: 0.1, depthWrite: false })
     const slabGeo = new THREE.BoxGeometry(6.3, 0.03, 6.3)
     const slab = new THREE.Mesh(slabGeo, ild)
     slab.position.y = -0.016
@@ -712,8 +742,7 @@ export function buildStack(o: { die: THREE.CanvasTexture }): StackStation {
     labels.push(new THREE.Vector3(-3.15, levels[k] + H[k] / 2, 3.15))
   }
 
-  const disc = softRect(256, 256, 0.16)
-  g.add(flat(10.5, 10.5, M.shadow(disc, 0.65), 0.003))
+  g.add(flat(10.5, 10.5, M.shadow(M.rect(256, 256, 0.16), 0.65), 0.003))
 
   const drop = [0, 0, 0, 0]
   return {
@@ -777,7 +806,7 @@ export function buildBurnIn(o: { mobile: boolean }): BurnInStation {
   const standoffs = new THREE.Mesh(mergeGeometries(so)!, M.brass)
   so.forEach(s => s.dispose())
   g.add(standoffs)
-  const silkMat = new THREE.MeshStandardMaterial({ color: '#f1f0ea', map: boardSilkTexture(layout, o.mobile ? 72 : 136), transparent: true, roughness: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 })
+  const silkMat = new THREE.MeshStandardMaterial({ color: '#f1f0ea', alphaMap: boardSilkTexture(layout, o.mobile ? 72 : 136), transparent: true, roughness: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 })
   const silkPlane = flat(BW, BD, silkMat, BT + 0.004)
   silkPlane.renderOrder = 1
   g.add(silkPlane)
@@ -872,16 +901,19 @@ export function buildBurnIn(o: { mobile: boolean }): BurnInStation {
   const pTop = pkg.userData.top as THREE.Mesh
   const bodyGeo = (pBody.geometry as THREE.BufferGeometry).clone().translate(0, pBody.position.y, 0)
   const topGeo = (pTop.geometry as THREE.BufferGeometry).clone().rotateX(-Math.PI / 2).translate(0, pTop.position.y, 0)
-  const chipBody = new THREE.InstancedMesh(bodyGeo, (pBody.material as THREE.Material).clone(), sockets.length)
-  const chipTop = new THREE.InstancedMesh(topGeo, pTop.material as THREE.Material, sockets.length)
+  const chipBody = new THREE.InstancedMesh(bodyGeo, MATI.epoxy(), sockets.length)
+  // (the etched lids are plain meshes: the lid program every other chapter
+  // already has, rather than an instanced variant only the Fab would build)
+  const tops = sockets.map(() => new THREE.Mesh(topGeo, pTop.material as THREE.Material))
   const SEAT = BT + 0.1
+  let lastY = NaN
   const chipAt = (i: number, y: number) => {
     m4.makeTranslation(sockets[i].x, y, sockets[i].y)
     chipBody.setMatrixAt(i, m4)
-    chipTop.setMatrixAt(i, m4)
+    tops[i].position.set(sockets[i].x, y, sockets[i].y)
   }
   sockets.forEach((_, i) => chipAt(i, SEAT))
-  g.add(chipBody, chipTop)
+  g.add(chipBody, ...tops)
 
   // pick-and-place nozzle (seats the last part)
   const LAST = 6 // U7: seated last, in full view
@@ -898,24 +930,30 @@ export function buildBurnIn(o: { mobile: boolean }): BurnInStation {
 
   // PASS LEDs (0603) and the green light they throw on the mask
   const ledMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 0.09, 0.13), new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), leds.length)
-  const poolMat = new THREE.MeshBasicMaterial({ color: '#ffffff', alphaMap: softDisc(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
-  const poolMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.05, 1.05).rotateX(-Math.PI / 2), poolMat, leds.length)
-  poolMesh.renderOrder = 3
+  // (one small mesh per pool: the masked-basic program the shadows already use,
+  // rather than an instanced variant only these eight would build)
+  const poolGeo = new THREE.PlaneGeometry(1.5, 1.5).rotateX(-Math.PI / 2)
+  const poolMats = leds.map(() => new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: M.disc(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }))
+  const pools = poolMats.map(m => {
+    const p = new THREE.Mesh(poolGeo, m)
+    p.renderOrder = 3
+    p.visible = false
+    return p
+  })
   const off = new THREE.Color('#1a2320')
   const on = new THREE.Color(S.signal).multiplyScalar(3.2)
-  const pool = new THREE.Color(S.signal).multiplyScalar(0.11)
+  // (a soft falloff: brighter at the heart than the old flat disc, gone by the rim)
+  const pool = new THREE.Color(S.signal).multiplyScalar(0.2)
   const tmpC = new THREE.Color()
   leds.forEach((l, i) => {
     m4.makeTranslation(l.x, BT + 0.045, l.y)
     ledMesh.setMatrixAt(i, m4)
-    m4.makeTranslation(l.x, BT + 0.006, l.y)
-    poolMesh.setMatrixAt(i, m4)
+    pools[i].position.set(l.x, BT + 0.006, l.y)
     ledMesh.setColorAt(i, off)
-    poolMesh.setColorAt(i, tmpC.setRGB(0, 0, 0))
   })
-  g.add(ledMesh, poolMesh)
+  g.add(ledMesh, ...pools)
 
-  const rect = softRect(256, 256, 0.12)
+  const rect = M.rect(256, 256, 0.12)
   g.add(flat(BW + 2.2, BD + 2.2, M.shadow(rect, 0.7), 0.003))
 
   const ledWorld = leds.map(l => new THREE.Vector3(l.x, BT + 0.1, l.y))
@@ -930,9 +968,12 @@ export function buildBurnIn(o: { mobile: boolean }): BurnInStation {
       const settle = Math.sin(Math.PI * segment(place, 0.45, 0.6)) * 0.012
       const up = ease.inOutCubic(segment(place, 0.62, 1))
       const carry = SEAT + lerp(4.2, 0, down) - settle
-      chipAt(LAST, place < 0.6 ? carry : SEAT)
-      chipBody.instanceMatrix.needsUpdate = true
-      chipTop.instanceMatrix.needsUpdate = true
+      const y = place < 0.6 ? carry : SEAT
+      if (y !== lastY) {
+        lastY = y
+        chipAt(LAST, y)
+        chipBody.instanceMatrix.needsUpdate = true
+      }
       nozzle.position.y = (place < 0.6 ? carry + 0.17 : SEAT + 0.17) + up * 5.5
       nozzle.visible = place < 0.999
       let dirty = false
@@ -942,15 +983,14 @@ export function buildBurnIn(o: { mobile: boolean }): BurnInStation {
         lastPass[i] = v
         dirty = true
         ledMesh.setColorAt(i, tmpC.copy(off).lerp(on, v / 100))
-        poolMesh.setColorAt(i, tmpC.copy(pool).multiplyScalar(v / 100))
+        poolMats[i].color.copy(pool).multiplyScalar(v / 100)
+        pools[i].visible = v > 0
       }
-      if (dirty) {
-        ledMesh.instanceColor!.needsUpdate = true
-        poolMesh.instanceColor!.needsUpdate = true
-      }
+      if (dirty) ledMesh.instanceColor!.needsUpdate = true
       traces.set({ time, flow, density: 2.6, glow: 0.7 * live })
       // the PASS lights breathe, slowly (well under 1 Hz)
-      poolMat.opacity = 0.85 + 0.15 * Math.sin(time * 1.3)
+      const breathe = 0.85 + 0.15 * Math.sin(time * 1.3)
+      for (let i = 0; i < poolMats.length; i++) poolMats[i].opacity = breathe
     },
   }
 }

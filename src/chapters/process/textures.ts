@@ -316,7 +316,7 @@ export interface BoardLayout {
   leds: THREE.Vector2[]
 }
 
-/** The burn-in board's silkscreen (white on transparent), in board-local XZ. */
+/** The burn-in board's silkscreen, in board-local XZ: an alphaMap (white ink on opaque black; three reads green). */
 export function boardSilkTexture(L: BoardLayout, px: number): THREE.CanvasTexture {
   const W = Math.round(L.w * px)
   const H = Math.round(L.d * px)
@@ -327,7 +327,8 @@ export function boardSilkTexture(L: BoardLayout, px: number): THREE.CanvasTextur
       const k = cw / L.w
       const X = (x: number) => (x + L.w / 2) * k
       const Z = (z: number) => (z + L.d / 2) * k
-      g.clearRect(0, 0, cw, ch)
+      g.fillStyle = '#000'
+      g.fillRect(0, 0, cw, ch)
       g.strokeStyle = '#fff'
       g.fillStyle = '#fff'
       g.lineWidth = Math.max(2, k * 0.035)
@@ -377,20 +378,28 @@ export function boardSilkTexture(L: BoardLayout, px: number): THREE.CanvasTextur
         g.stroke()
       }
     },
-    { fonts: true },
+    { fonts: true, srgb: false },
   )
 }
 
-/** A soft radial disc (white, alpha falloff): contact shadows and light pools. */
+/*
+ * The two soft masks below feed `alphaMap`, which three reads from the GREEN
+ * channel (not alpha): they paint grey on OPAQUE black, never white fading to
+ * transparent (that would read as a hard-edged solid shape).
+ */
+
+/** A soft radial disc (grey on opaque black; an alphaMap): contact shadows and light pools. */
 export function softDisc(size = 128, hard = 0): THREE.CanvasTexture {
   return canvasTex(
     size,
     size,
     (g, N) => {
+      g.fillStyle = '#000'
+      g.fillRect(0, 0, N, N)
       const gr = g.createRadialGradient(N / 2, N / 2, N * 0.5 * hard, N / 2, N / 2, N / 2)
-      gr.addColorStop(0, 'rgba(255,255,255,1)')
-      gr.addColorStop(0.5, 'rgba(255,255,255,0.45)')
-      gr.addColorStop(1, 'rgba(255,255,255,0)')
+      gr.addColorStop(0, '#fff')
+      gr.addColorStop(0.5, 'rgb(115,115,115)')
+      gr.addColorStop(1, '#000')
       g.fillStyle = gr
       g.fillRect(0, 0, N, N)
     },
@@ -398,12 +407,14 @@ export function softDisc(size = 128, hard = 0): THREE.CanvasTexture {
   )
 }
 
-/** A soft rounded-rectangle shadow (for boards / plates): white centre fading to the edges. */
+/** A soft rounded-rectangle mask (grey on opaque black; an alphaMap) for boards / plates: white centre fading to the edges. */
 export function softRect(w = 256, h = 256, feather = 0.18): THREE.CanvasTexture {
   return canvasTex(
     w,
     h,
     (g, W, H) => {
+      g.fillStyle = '#000'
+      g.fillRect(0, 0, W, H)
       // (ctx.filter is missing in Safari: blur via a shadow cast from off-canvas)
       const f = Math.min(W, H) * feather
       g.shadowColor = '#fff'
@@ -411,6 +422,39 @@ export function softRect(w = 256, h = 256, feather = 0.18): THREE.CanvasTexture 
       g.shadowOffsetX = W * 2
       g.fillStyle = '#fff'
       g.fillRect(f - W * 2, f, W - 2 * f, H - 2 * f)
+    },
+    { srgb: false },
+  )
+}
+
+/**
+ * The lithography light curtain's mask (grey on opaque black; an alphaMap):
+ * soft at its two sides and falling off toward the wafer, (0.35 + 0.65·v)²
+ * from the wafer (v = 0) up to the slit (v = 1).
+ */
+export function curtainMask(w = 64, h = 128): THREE.CanvasTexture {
+  return canvasTex(
+    w,
+    h,
+    (g, W, H) => {
+      const img = g.createImageData(W, H)
+      const ss = (a: number, b: number, x: number) => {
+        const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+        return t * t * (3 - 2 * t)
+      }
+      for (let r = 0; r < H; r++) {
+        const v = 1 - (r + 0.5) / H // canvas top row = uv.y 1 (flipY)
+        const y = 0.35 + 0.65 * v
+        for (let c = 0; c < W; c++) {
+          const u = (c + 0.5) / W
+          const x = 1 - ss(0.42, 0.5, Math.abs(u - 0.5))
+          const k = Math.round(255 * x * y * y)
+          const o = (r * W + c) * 4
+          img.data[o] = img.data[o + 1] = img.data[o + 2] = k
+          img.data[o + 3] = 255
+        }
+      }
+      g.putImageData(img, 0, 0)
     },
     { srgb: false },
   )
