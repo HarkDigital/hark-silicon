@@ -1,64 +1,168 @@
 import * as THREE from 'three'
-import type { Chapter } from '../../core/types'
-import { el, rise, setRise, reveal } from '../../core/dom'
+import type { CameraPose, Chapter, ChapterContext, Frame } from '../../core/types'
+import { Callout, el, reveal, rise, setRise } from '../../core/dom'
 import { BRAND, MICROCOPY } from '../../content'
-import { ease, segment, smoothstep } from '../../core/math'
-import { placeholderFloor, framedCamera } from '../common'
-import { MAT, Traces, bondWires, chipPackage, dieMaterial, dieTexture, route, silk, smdField } from '../../kit/silicon'
-import '../chapter.css'
+import { clamp, ease, lerp, segment, smoothstep } from '../../core/math'
+import { S } from '../../kit/silicon'
+import { buildHero, LID_Y, type HeroSet } from './board'
+import { dof } from './dof'
+import './hero.css'
 
 /*
- * HERO (placeholder). Pattern: an intro beat with the manifesto + scroll hint,
- * a middle beat for the signature animation, and a payoff with the tagline
- * and two CTAs (land('work') / land('contact')). Replace the scene entirely.
+ * HERO — "Package". The Hark chip, shot as a product macro.
+ *
+ *   0.00–0.10  INTRO   a low, grazing close on the etched lid: the mark
+ *                      catching a raking key, the far leads and the board
+ *                      melting into bokeh, D1 a green disc behind the chip.
+ *                      After the loader, a time-based POWER-ON (~1.6 s):
+ *                      signals race in from the dark edges of the board
+ *                      (Traces reach), D1 lights, a light sweep crosses the
+ *                      lid (envTurn).
+ *   0.10–0.60  BOARD   the camera pulls up and back, sliding low across the
+ *                      board from U2 (1.8 V regulator) past the chip to Y1
+ *                      (100 MHz crystal); focus racks between them; probe
+ *                      callouts name the parts; pulses stream in.
+ *   0.60–0.93  PAYOFF  settled high over the chip (3/4 top-down; chip right
+ *                      of centre on landscape, on top on portrait): the
+ *                      tagline clocks in + CTAs.
+ *   0.93–1.00  OUT     the camera dives into the lid as the SEM cut begins.
+ *
+ * Every pose derives from `local`; frame.time only drives the idle signal
+ * bursts, LED breathing and the power-on clock.
  */
+
+interface Shot {
+  tx: number
+  ty: number
+  tz: number
+  /** azimuth / elevation of the camera around the target (degrees) */
+  az: number
+  el: number
+  dist: number
+  /** the width (cm) that must fit across the frame (portrait framing) */
+  fit: number
+  fov: number
+  /** where the target sits on screen (NDC) */
+  sx: number
+  sy: number
+  /** the point in focus (rack focus), board XZ */
+  fx: number
+  fz: number
+  /** depth-of-field band (cm in front of / behind focus) and bokeh aperture */
+  near: number
+  far: number
+  ap: number
+  /** key light, relative to the camera: azimuth offset from straight behind the subject, elevation (deg), strength */
+  kAz: number
+  kEl: number
+  key: number
+  /** studio reflections: strength, and rotation relative to the camera (rad) */
+  env: number
+  turn: number
+}
+
+type Key = 'intro' | 'b1' | 'b2' | 'pay' | 'out'
+const LAND: Record<Key, Shot> = {
+  intro: { tx: 0, ty: LID_Y, tz: 0.1, az: 10, el: 13, dist: 7.6, fit: 2.6, fov: 30, sx: 0.24, sy: -0.16, fx: 0, fz: 0.1, near: 3.2, far: 4.0, ap: 0.5, kAz: 5, kEl: 13, key: 0.9, env: 0.5, turn: 1.0 },
+  b1: { tx: 2.0, ty: 0.12, tz: 2.2, az: 36, el: 14, dist: 8.6, fit: 5, fov: 30, sx: 0.04, sy: -0.06, fx: 4.3, fz: 4.4, near: 6, far: 12, ap: 0.42, kAz: 22, kEl: 14, key: 1.0, env: 0.5, turn: 0.5 },
+  b2: { tx: -1.9, ty: 0.1, tz: 2.0, az: -32, el: 19, dist: 9.8, fit: 6, fov: 30, sx: -0.04, sy: -0.06, fx: -4.2, fz: 4.25, near: 7, far: 13, ap: 0.42, kAz: -22, kEl: 19, key: 1.0, env: 0.5, turn: 0.5 },
+  pay: { tx: 0, ty: LID_Y, tz: 0, az: -14, el: 54, dist: 11.8, fit: 3.4, fov: 30, sx: 0.42, sy: 0.03, fx: 0, fz: 0, near: 7, far: 9, ap: 0.34, kAz: 8, kEl: 50, key: 1.3, env: 0.3, turn: 0.5 },
+  out: { tx: 0, ty: LID_Y, tz: 0.1, az: -8, el: 70, dist: 2.3, fit: 1.2, fov: 28, sx: 0, sy: 0, fx: 0, fz: 0.1, near: 1.2, far: 1.6, ap: 0.5, kAz: 16, kEl: 64, key: 1.2, env: 0.3, turn: 0.5 },
+}
+const PORT: Record<Key, Shot> = {
+  intro: { ...LAND.intro, sx: 0, sy: 0.3, fov: 36, el: 24, fit: 3.3 },
+  b1: { ...LAND.b1, sx: 0, sy: 0.08, fov: 38, fit: 3.6 },
+  b2: { ...LAND.b2, sx: 0, sy: 0.08, fov: 38, fit: 4.0 },
+  pay: { ...LAND.pay, sx: 0, sy: 0.36, fov: 38, fit: 3.9, el: 58, kEl: 66, key: 1.1 },
+  out: { ...LAND.out, fov: 34, fit: 1.4 },
+}
+
+/** smootherstep on a segment */
+const sm = (x: number, a: number, b: number) => {
+  const t = segment(x, a, b)
+  return t * t * t * (t * (t * 6 - 15) + 10)
+}
+const outQuart = (t: number) => 1 - Math.pow(1 - clamp(t), 4)
+
 export default function create(): Chapter {
   const group = new THREE.Group()
-  // KIT SMOKE TEST (placeholder): a board standing up to face the camera
-  const board = new THREE.Group()
-  board.rotation.x = Math.PI / 2
-  const pcb = new THREE.Mesh(new THREE.BoxGeometry(14, 0.16, 9), MAT.mask())
-  pcb.position.y = -0.08
-  board.add(pcb)
-  const chip = chipPackage({ w: 2.2, kind: 'qfp', pinsPerSide: 16, lines: ['HARK-1', 'MAKE · LISTEN'] })
-  board.add(chip)
-  const paths: THREE.Vector3[][] = []
-  for (let i = 0; i < 16; i++) {
-    const a = new THREE.Vector2(1.3, -0.9 + i * 0.12)
-    const b = new THREE.Vector2(6.8, -4 + i * 0.5)
-    paths.push(route(a, b, { y: 0.002, jog: 0.3 + (i % 4) * 0.1 }))
-    paths.push(route(new THREE.Vector2(-1.3, -0.9 + i * 0.12), new THREE.Vector2(-6.8, -4 + i * 0.5), { y: 0.002, jog: 0.4 }))
-  }
-  const traces = new Traces(paths, { width: 0.05 })
-  board.add(traces.group)
-  board.add(smdField({ x0: -6.5, z0: -4, x1: 6.5, z1: 4, count: 160, avoid: (x, z) => Math.abs(x) < 1.8 && Math.abs(z) < 1.8 }))
-  const lab = silk('U1  HARK-1', { height: 0.22 })
-  lab.position.set(-1.1, 0.002, 1.5)
-  board.add(lab)
-  const die = dieTexture({ size: 1024 })
-  const dieMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 2.4), dieMaterial(die.texture))
-  dieMesh.position.set(4.4, 0.04, 2)
-  board.add(dieMesh)
-  const pads: [THREE.Vector3, THREE.Vector3][] = []
-  for (let i = 0; i < 10; i++) pads.push([new THREE.Vector3(3.3 + i * 0.22, 0.08, 0.9), new THREE.Vector3(3.3 + i * 0.22, 0.01, 0.2)])
-  board.add(bondWires(pads))
-  board.scale.setScalar(0.42)
-  group.add(board, placeholderFloor())
+  let set: HeroSet | null = null
+  let reduced = false
+
+  // DOM
   let intro: HTMLElement
   let payoff: HTMLElement
   let title: HTMLElement
+  const callouts: { c: Callout; at: 'u1' | 'vdd' | 'clk'; a: number; b: number }[] = []
+
+  // power-on clock (performance time, seconds)
+  let revealAt = -1
+  let initAt = 0
+  const now = () => performance.now() / 1000
+
+  // pose, computed in update(), written in camera()
+  const shot: Shot = { ...LAND.intro }
+  const pos = new THREE.Vector3()
+  const tgt = new THREE.Vector3()
+  const focusPt = new THREE.Vector3()
+  let fov = 28
+  let parallax = 0
+  const tmpF = new THREE.Vector3()
+  const tmpR = new THREE.Vector3()
+  const tmpU = new THREE.Vector3()
+  const UP = new THREE.Vector3(0, 1, 0)
+  const tmpP = new THREE.Vector3()
+  // a private camera for callout projection: this frame's pose (+ the engine's parallax)
+  const proj = new THREE.PerspectiveCamera(28, 1, 0.05, 400)
+  const ledCol = new THREE.Color()
+  const ledOff = new THREE.Color('#06140d')
+  const signal = new THREE.Color(S.signal)
+
+  const shotAt = (local: number, portrait: boolean, out: Shot) => {
+    const P = portrait ? PORT : LAND
+    const w1 = sm(local, 0.06, 0.3)
+    const w2 = sm(local, 0.3, 0.5)
+    const w3 = sm(local, 0.5, 0.67)
+    const w4 = Math.pow(segment(local, 0.925, 1), 1.7)
+    for (const k of Object.keys(out) as (keyof Shot)[]) {
+      out[k] = lerp(lerp(lerp(lerp(P.intro[k], P.b1[k], w1), P.b2[k], w2), P.pay[k], w3), P.out[k], w4)
+    }
+    return out
+  }
+
   return {
     id: 'hero',
     group,
     anchors: [0.8],
-    init(ctx) {
-      intro = el('div', 'ph-copy', undefined, ctx.stage)
-      el('p', 'hud-eyebrow', MICROCOPY.signalEyebrow, intro)
-      el('p', 'hud-body', BRAND.manifesto, intro)
-      el('p', 'hud-label', MICROCOPY.scrollHint + ' ↓', intro)
-      payoff = el('div', 'ph-copy', undefined, ctx.stage)
-      title = rise(el('h1', 'hud-title', undefined, payoff), 'Make the internet <em>listen.</em>')
-      const ctas = el('div', 'ph-ctas', undefined, payoff)
+
+    async init(ctx: ChapterContext) {
+      reduced = ctx.reducedMotion
+      initAt = now()
+      set = await buildHero(ctx.mobile)
+      group.add(set.root)
+
+      // ---- DOM: the intro datasheet
+      intro = el('div', 'hs-intro', undefined, ctx.stage)
+      const sheet = el('div', 'hud-panel hs-sheet', undefined, intro)
+      const head = el('div', 'hs-sheet-head', undefined, sheet)
+      el('span', 'hs-pn', 'HK-0N · HARK-1', head)
+      el('span', 'hs-rev', 'REV A', head)
+      el('p', 'hud-eyebrow', MICROCOPY.signalEyebrow, sheet)
+      el('p', 'hud-body hs-manifesto', BRAND.manifesto, sheet)
+      el('hr', 'hud-rule hs-rule', undefined, sheet)
+      const foot = el('div', 'hs-sheet-foot', undefined, sheet)
+      const hint = el('p', 'hud-label hs-hint', undefined, foot)
+      el('span', 'hs-hint-arrow', '↓', hint)
+      el('span', '', MICROCOPY.scrollHint, hint)
+      el('p', 'hud-label hs-spec', 'VDD 1.8 V · CLK 100 MHz', foot)
+
+      // ---- DOM: the payoff
+      payoff = el('div', 'hs-payoff', undefined, ctx.stage)
+      el('div', 'hs-scrim', undefined, payoff)
+      const inner = el('div', 'hs-payoff-inner', undefined, payoff)
+      el('p', 'hud-label hs-locale', BRAND.locale, inner)
+      title = rise(el('h1', 'hud-title hs-title', undefined, inner), 'Make the internet <em>listen.</em>')
+      const ctas = el('div', 'hs-ctas', undefined, inner)
       const see = el('button', 'hud-btn', 'See the work', ctas)
       see.type = 'button'
       see.addEventListener('click', () => window.__hark?.land('work'))
@@ -69,17 +173,177 @@ export default function create(): Chapter {
         e.preventDefault()
         window.__hark.land('contact')
       })
+
+      // ---- probe callouts
+      const mk = (text: string, at: 'u1' | 'vdd' | 'clk', side: 'left' | 'right', ox: number, oy: number, a: number, b: number) => {
+        const c = new Callout(ctx.stage, { side, offset: { x: ctx.mobile ? Math.round(ox * 0.6) : ox, y: oy } })
+        c.label.textContent = text
+        c.root.classList.add('hs-callout')
+        callouts.push({ c, at, a, b })
+      }
+      mk('U1 · HARK-1', 'u1', 'right', 76, -58, 0.15, 0.37)
+      mk('VDD 1.8 V', 'vdd', 'right', 62, -52, 0.17, 0.33)
+      mk('CLK 100 MHz', 'clk', 'left', 62, -52, 0.37, 0.55)
+
+      const onReveal = () => {
+        if (revealAt < 0) revealAt = now()
+      }
+      if (document.documentElement.dataset.ready === '1') onReveal()
+      else window.addEventListener('hark:reveal', onReveal, { once: true })
     },
-    update(local, frame) {
-      traces.set({ time: frame.time, flow: 5, density: 1.2 })
-      const spin = ease.inOutCubic(segment(local, 0.1, 0.6))
-      board.rotation.set(Math.PI / 2 - 0.35 + 0.1 * Math.sin(frame.time * 0.4), 0, 0.15 * spin)
-      reveal(intro, 1 - smoothstep(0.08, 0.14, local))
-      reveal(payoff, smoothstep(0.62, 0.7, local) * (1 - smoothstep(0.93, 0.97, local)))
-      setRise(title, local > 0.64 && local < 0.95)
+
+    update(local: number, frame: Frame, ctx: ChapterContext) {
+      if (!set) return
+      const t = frame.time
+      const portrait = frame.width <= frame.height
+      const aspect = frame.width / Math.max(1, frame.height)
+
+      // ---- power-on (time-based, after the loader)
+      const clock = now()
+      if (revealAt < 0 && (document.documentElement.dataset.ready === '1' || clock - initAt > 20)) revealAt = clock
+      const since = revealAt < 0 ? 0 : clock - revealAt
+      const on = revealAt >= 0
+      const reachK = reduced ? (on ? 1 : 0) : ease.inOutCubic(segment(since, 0.05, 1.25))
+      const glowK = reduced ? smoothstep(0, 0.8, since) : smoothstep(0.1, 1.2, since)
+      const ledK = reduced ? smoothstep(0.3, 1.0, since) : sm(since, 1.1, 1.45)
+      const sweep = reduced ? 0 : (1 - outQuart(segment(since, 0.2, 1.7))) * -1.25
+
+      // ---- camera
+      shotAt(local, portrait, shot)
+      // narrower landscapes: the intro subject slides right, clear of the datasheet
+      // (short landscape phones: the sheet is half the screen wide)
+      if (!portrait) shot.sx += (frame.height <= 500 ? 0.2 : clamp((1.6 - aspect) * 0.3, 0, 0.12)) * (1 - sm(local, 0.06, 0.3))
+      const tanV = Math.tan(THREE.MathUtils.degToRad(shot.fov / 2))
+      const d = Math.max(shot.dist, shot.fit / (2 * tanV * aspect))
+      const az = THREE.MathUtils.degToRad(shot.az)
+      const elv = THREE.MathUtils.degToRad(shot.el)
+      // the slow macro drift: a millimetre or two, only while settled
+      const drift = reduced ? 0 : 1
+      tgt.set(shot.tx + 0.04 * Math.sin(t * 0.21) * drift, shot.ty, shot.tz + 0.03 * Math.sin(t * 0.17 + 1) * drift)
+      focusPt.set(shot.fx, 0.15, shot.fz)
+      pos.set(Math.sin(az) * Math.cos(elv), Math.sin(elv), Math.cos(az) * Math.cos(elv)).multiplyScalar(d).add(tgt)
+      tmpF.subVectors(tgt, pos).normalize()
+      tmpR.crossVectors(tmpF, UP).normalize()
+      tmpU.crossVectors(tmpR, tmpF)
+      const shiftR = -shot.sx * d * tanV * aspect
+      const shiftU = -shot.sy * d * tanV
+      pos.addScaledVector(tmpR, shiftR).addScaledVector(tmpU, shiftU)
+      tgt.addScaledVector(tmpR, shiftR).addScaledVector(tmpU, shiftU)
+      fov = shot.fov
+      parallax = 0.012 * d
+
+      // ---- depth of field + bokeh
+      dof.uDofFocus.value = pos.distanceTo(focusPt)
+      dof.uDofNear.value.set(shot.near * 0.35, shot.near)
+      dof.uDofFar.value.set(shot.far * 0.25, shot.far)
+      dof.uDofAmt.value = 1
+      for (const b of [set.bokeh, set.bokehFar]) {
+        b.u.uAperture.value = shot.ap
+        b.u.uTanV.value = tanV
+        b.u.uMinR.value = frame.mobile ? 0.008 : 0.006
+      }
+
+      // ---- signals: ambient drift + clock-tick bursts + a scroll push
+      let offset: number
+      if (reduced) offset = t * 0.5 + local * 10
+      else {
+        const P = 2.6
+        const n = Math.floor(t / P)
+        const f = t - n * P
+        offset = t * 1.2 + 6.5 * (n + ease.inOutCubic(clamp(f / 0.7))) + local * 34
+      }
+      set.traces.set({
+        time: 0,
+        flow: 0,
+        offset,
+        density: 0.8,
+        glow: lerp(0.15, 1, glowK),
+        reach: reachK * (set.maxLen + 1),
+      })
+
+      // ---- LEDs: D1 comes on with the power-on, then breathes slowly; D2 idles
+      set.leds.forEach((l, i) => {
+        // slow breathing (well under 1 Hz), steady under reduced motion
+        const breathe = reduced ? 1 : i === 0 ? 0.92 + 0.08 * Math.sin(t * 1.1) : 0.75 + 0.25 * Math.sin(t * 2.4 + 1)
+        const k = ledK * breathe
+        ledCol.copy(ledOff).lerp(signal, Math.min(1, k)).multiplyScalar(1 + 3.2 * k)
+        l.emit.color.copy(ledCol)
+        l.lens.emissiveIntensity = 0.9 * k
+        l.spill.opacity = 0.22 * k
+        set!.bokeh.power(l.idx, l.power * k)
+      })
+
+      // ---- world: macro studio, grazing key, bokeh behind
+      const wp = ctx.world.params
+      wp.top = '#080a0f'
+      wp.bottom = '#030405'
+      wp.a = '#1f9d63'
+      wp.b = '#6e6557'
+      wp.bokeh = 0.85
+      // the pools gather behind the subject
+      wp.focus.set(shot.sx * aspect + 0.1, shot.sy + 0.35)
+      // the studio travels with the camera (lights on the rig): the key sits behind the
+      // subject so the lid and the pad tops carry a soft sheen that reveals the etch
+      wp.env = shot.env * lerp(0.6, 1, glowK)
+      wp.envTurn = az + shot.turn + sweep + (reduced ? 0 : 0.06 * Math.sin(t * 0.13))
+      const ka = az + Math.PI + THREE.MathUtils.degToRad(shot.kAz)
+      const ke = THREE.MathUtils.degToRad(shot.kEl)
+      wp.keyDir.set(Math.sin(ka) * Math.cos(ke), Math.sin(ke), Math.cos(ka) * Math.cos(ke))
+      wp.key = shot.key * lerp(0.55, 1, glowK)
+      wp.fill = 0.28
+
+      // ---- post
+      const pp = ctx.post.params
+      pp.bloomStrength = 0.5
+      pp.bloomRadius = 0.55
+      pp.bloomThreshold = 0.95
+      pp.vignette = 0.42
+      pp.grain = 0.03
+
+      // ---- DOM
+      reveal(intro, 1 - smoothstep(0.075, 0.11, local))
+      intro.classList.toggle('is-in', on && since > (reduced ? 0 : 0.35))
+      reveal(payoff, smoothstep(0.6, 0.66, local) * (1 - smoothstep(0.925, 0.955, local)), 0)
+      setRise(title, local > 0.615 && local < 0.945)
+
+      // ---- callouts: this frame's pose (plus the engine's pointer parallax)
+      proj.fov = fov
+      proj.aspect = aspect
+      proj.position.copy(pos)
+      proj.up.set(0, 1, 0)
+      proj.lookAt(tgt)
+      if (!reduced && parallax) {
+        proj.updateMatrixWorld()
+        tmpR.setFromMatrixColumn(proj.matrixWorld, 0)
+        tmpU.setFromMatrixColumn(proj.matrixWorld, 1)
+        proj.position.addScaledVector(tmpR, frame.pointer.x * parallax).addScaledVector(tmpU, frame.pointer.y * parallax * 0.6)
+        proj.lookAt(tgt)
+      }
+      proj.updateProjectionMatrix()
+      proj.updateMatrixWorld()
+      const H = frame.height
+      const shortLand = !portrait && H <= 500
+      const safeTop = shortLand ? 56 : clamp(0.105 * H, 80, 112)
+      const safeBot = shortLand ? 52 : clamp(0.105 * H, 82, 110)
+      const v = tmpP
+      for (const { c, at, a, b } of callouts) {
+        const p = set.pins[at]
+        let vis = smoothstep(a, a + 0.03, local) * (1 - smoothstep(b - 0.03, b, local))
+        if (vis > 0) {
+          v.copy(p).project(proj)
+          const y = (-v.y * 0.5 + 0.5) * H
+          vis *= smoothstep(safeTop + 44, safeTop + 76, y) * (1 - smoothstep(H - safeBot - 40, H - safeBot - 12, y))
+        }
+        c.update(p, proj, frame.width, H, vis)
+      }
     },
-    camera(local, frame, out) {
-      framedCamera(out, frame, ease.inOutCubic(segment(local, 0.55, 0.7)))
+
+    camera(_local: number, _frame: Frame, out: CameraPose) {
+      out.position.copy(pos)
+      out.target.copy(tgt)
+      out.fov = fov
+      out.roll = 0
+      out.parallax = parallax
     },
   }
 }

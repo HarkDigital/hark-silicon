@@ -148,9 +148,10 @@ export type PostParams = {
 
 /** Bloom only catches HDR (> ~1.0): emissive lamps, LEDs, speculars. */
 export const POST_DEFAULTS: PostParams = {
-  bloomStrength: 0.55,
-  bloomRadius: 0.5,
-  bloomThreshold: 0.95,
+  // tight bloom: only true light (pulses, LEDs); a looser one washed green frames
+  bloomStrength: 0.45,
+  bloomRadius: 0.35,
+  bloomThreshold: 1.05,
   aberration: 0.0012,
   grain: 0.028,
   vignette: 0.34,

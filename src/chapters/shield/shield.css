@@ -1,0 +1,390 @@
+/* SURGE — "Hacked? Breathe." Every selector scoped under .stage-shield. */
+
+.stage-shield {
+  --fault: #ff5d5d;
+}
+
+/* a graphite falloff behind the copy column */
+.stage-shield .sh-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(4, 6, 9, 0.72) 0%, rgba(4, 6, 9, 0.46) 30%, rgba(4, 6, 9, 0) 55%);
+}
+
+/* measures the safe area (chrome bands) for the callouts; never visible */
+.stage-shield .sh-probe {
+  position: absolute;
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  left: 0;
+  width: 0;
+  visibility: hidden !important;
+  pointer-events: none;
+}
+
+/* ---------- beat 1: the fault readout ---------- */
+
+.stage-shield .sh-fault {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  width: min(330px, 40vw);
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px 15px;
+  --hair: rgba(255, 93, 93, 0.7);
+}
+.stage-shield .sh-fault-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+.stage-shield .sh-fault-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fault);
+}
+.stage-shield .sh-fault-k::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fault);
+  box-shadow: 0 0 10px rgba(255, 93, 93, 0.8);
+}
+.stage-shield .sh-read {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.stage-shield .sh-volt {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.9rem, 2.8vw, 2.6rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.stage-shield .sh-meter {
+  --v: 0.125;
+  position: relative;
+  height: 6px;
+  background: rgba(238, 241, 244, 0.1);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.stage-shield .sh-meter-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--v));
+  background: linear-gradient(90deg, #00ff85 0 12%, #ffb020 16%, #ff3b3b 30%);
+  background-size: calc(100% / var(--v)) 100%;
+}
+.stage-shield .sh-meter-limit {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 13.75%;
+  width: 2px;
+  background: var(--fg);
+}
+.stage-shield .sh-fault-meta {
+  margin: 0;
+}
+
+/* ---------- beat 2: eyebrow, headline, body plate + status rows ---------- */
+
+.stage-shield .sh-a {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  width: min(620px, 46vw);
+  display: grid;
+  justify-items: start;
+  gap: clamp(14px, 2.2vh, 22px);
+}
+.stage-shield .sh-eyebrow {
+  padding: 7px 11px 7px 9px;
+  background: rgba(9, 11, 15, 0.84);
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 2px;
+  line-height: 1.35;
+}
+.stage-shield .sh-title {
+  font-size: clamp(3.2rem, 8.2vw, 8.4rem);
+}
+.stage-shield .sh-plate {
+  max-width: min(470px, 40vw);
+  padding: 18px 22px 16px;
+  display: grid;
+  gap: 14px;
+}
+.stage-shield .sh-plate .hud-body {
+  max-width: 43ch;
+}
+.stage-shield .sh-checks {
+  list-style: none;
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 5px;
+}
+.stage-shield .sh-check {
+  display: grid;
+  grid-template-columns: 4.2em 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+.stage-shield .sh-ref {
+  color: var(--gold);
+}
+.stage-shield .sh-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #ffc766;
+}
+.stage-shield .sh-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.stage-shield .sh-check.is-ok .sh-state {
+  color: var(--signal);
+}
+
+/* ---------- beat 3: the monitoring plate (24/7, label, CTA) ---------- */
+
+.stage-shield .sh-b {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  width: min(460px, 40vw);
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 18px 24px 22px;
+}
+.stage-shield .sh-b-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.stage-shield .sh-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+}
+.stage-shield .sh-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 10px rgba(0, 255, 133, 0.7);
+}
+.stage-shield .sh-stat {
+  font-size: clamp(4.2rem, 8vw, 8.2rem);
+  line-height: 0.86;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.stage-shield .sh-rule {
+  width: 100%;
+  margin: 2px 0;
+}
+.stage-shield .sh-stat-label {
+  max-width: 36ch;
+}
+.stage-shield .sh-cta {
+  margin-top: 6px;
+}
+
+/* ---------- probe labels ---------- */
+
+.stage-shield .sh-co .callout-label {
+  display: grid;
+  gap: 2px;
+  padding: 5px 9px 6px;
+  line-height: 1.35;
+}
+.stage-shield .sh-co-k {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+.stage-shield .sh-co-v {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(238, 241, 244, 0.86);
+}
+.stage-shield .sh-co--warn .callout-label {
+  box-shadow: inset 0 0 0 1px rgba(255, 93, 93, 0.55);
+}
+.stage-shield .sh-co--warn .sh-co-k {
+  color: var(--fault);
+}
+.stage-shield .sh-co--warn .callout-svg path {
+  stroke: var(--fault);
+  stroke-opacity: 0.85;
+}
+.stage-shield .sh-co--warn .callout-dot {
+  background: var(--fault);
+  box-shadow: 0 0 10px rgba(255, 93, 93, 0.8);
+}
+
+/* ---------- portrait: the scene up top, the copy below ---------- */
+
+@media (orientation: portrait) {
+  .stage-shield .sh-scrim {
+    background: linear-gradient(0deg, rgba(4, 6, 9, 0.78) 0%, rgba(4, 6, 9, 0.5) 40%, rgba(4, 6, 9, 0) 62%);
+  }
+  .stage-shield .sh-fault,
+  .stage-shield .sh-a,
+  .stage-shield .sh-b {
+    top: auto;
+    bottom: var(--safe-bottom);
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+    max-width: 620px;
+  }
+  .stage-shield .sh-fault {
+    max-width: 380px;
+  }
+  .stage-shield .sh-a {
+    gap: 12px;
+  }
+  .stage-shield .sh-title {
+    font-size: clamp(2.9rem, 12.4vw, 5.6rem);
+  }
+  .stage-shield .sh-plate {
+    max-width: none;
+    width: 100%;
+    padding: 15px 17px 13px;
+    gap: 11px;
+  }
+  .stage-shield .sh-plate .hud-body {
+    max-width: none;
+  }
+  .stage-shield .sh-b {
+    padding: 15px 18px 18px;
+    gap: 10px;
+  }
+  .stage-shield .sh-stat {
+    font-size: clamp(3.6rem, 17vw, 6.4rem);
+  }
+  .stage-shield .sh-stat-label {
+    max-width: none;
+  }
+}
+
+/* small phones: tighter still, the status rows collapse to one line */
+@media (orientation: portrait) and (max-height: 760px) {
+  .stage-shield .sh-title {
+    font-size: clamp(2.5rem, 11vw, 4rem);
+  }
+  .stage-shield .sh-eyebrow {
+    font-size: 10px;
+    padding: 5px 9px 5px 7px;
+  }
+  .stage-shield .sh-plate .hud-body,
+  .stage-shield .sh-stat-label {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .stage-shield .sh-checks {
+    display: none;
+  }
+  .stage-shield .sh-stat {
+    font-size: clamp(3rem, 14vw, 4.4rem);
+  }
+  .stage-shield .sh-b-head {
+    padding-bottom: 7px;
+  }
+}
+
+/* short desktop windows: a smaller headline so the plate clears the bottom band */
+@media (orientation: landscape) and (max-height: 820px) and (min-height: 501px) {
+  .stage-shield .sh-title {
+    font-size: clamp(3rem, 6.6vw, 6.6rem);
+  }
+  .stage-shield .sh-stat {
+    font-size: clamp(3.6rem, 6.6vw, 6.4rem);
+  }
+}
+
+/* short landscape phones: thin chrome bands, compact plates */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-shield .sh-a {
+    gap: 8px;
+    width: min(520px, 50vw);
+  }
+  .stage-shield .sh-eyebrow {
+    font-size: 10px;
+    padding: 4px 8px 4px 6px;
+  }
+  .stage-shield .sh-title {
+    font-size: clamp(2rem, 6.6vw, 3.4rem);
+  }
+  .stage-shield .sh-plate {
+    max-width: min(420px, 48vw);
+    padding: 10px 14px 10px;
+  }
+  .stage-shield .sh-plate .hud-body,
+  .stage-shield .sh-stat-label {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .stage-shield .sh-checks {
+    display: none;
+  }
+  .stage-shield .sh-fault {
+    width: min(300px, 44vw);
+    padding: 10px 14px;
+    gap: 7px;
+  }
+  .stage-shield .sh-b {
+    width: min(400px, 46vw);
+    padding: 10px 14px 12px;
+    gap: 6px;
+  }
+  .stage-shield .sh-b-head {
+    padding-bottom: 5px;
+  }
+  .stage-shield .sh-stat {
+    font-size: clamp(2.4rem, 7vw, 3.6rem);
+  }
+  .stage-shield .sh-cta {
+    margin-top: 2px;
+    padding: 9px 14px;
+  }
+}

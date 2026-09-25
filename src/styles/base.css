@@ -319,8 +319,11 @@ a {
   border-radius: 2px;
 }
 
-/* buttons: a lit signal pad */
+/* buttons: a lit signal pad (the chamfered fill lives on ::before, so the
+   focus outline on the button itself is never clipped) */
 .hud-btn {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -331,23 +334,39 @@ a {
   text-transform: uppercase;
   text-decoration: none;
   color: #02140b;
-  background: var(--signal);
+  background: none;
   padding: 13px 20px;
   border: 0;
   border-radius: 3px;
   cursor: pointer;
-  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
-  box-shadow: 0 0 24px rgba(0, 255, 133, 0.25);
+  filter: drop-shadow(0 0 12px rgba(0, 255, 133, 0.22));
   transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hud-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--signal);
+  border-radius: 3px;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
 }
 .hud-btn:hover,
 .hud-btn:focus-visible {
   transform: translateY(-2px);
 }
 .hud-btn--ghost {
-  background: rgba(9, 11, 15, 0.5);
   color: var(--fg);
-  box-shadow: inset 0 0 0 1px var(--line-strong);
+  filter: none;
+}
+.hud-btn--ghost::before {
+  background:
+    linear-gradient(var(--line-strong), var(--line-strong)) top / 100% 1px no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) bottom / 100% 1px no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) left / 1px 100% no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) right / 1px 100% no-repeat,
+    linear-gradient(135deg, transparent 5.2px, var(--line-strong) 5.2px, var(--line-strong) 6.4px, transparent 6.4px) top left / 9px 9px no-repeat,
+    rgba(9, 11, 15, 0.5);
 }
 
 /* the datasheet panel: matte, a gold hairline, a chamfered pin-1 corner */
@@ -618,9 +637,3 @@ a {
   background: rgba(13, 15, 18, 0.9);
 }
 
-/* phones and scaled-down devices (html.lowfx): no backdrop-filter over the canvas */
-.lowfx .hud-panel {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: rgba(9, 11, 15, 0.92);
-}

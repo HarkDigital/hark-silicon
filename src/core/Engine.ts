@@ -100,6 +100,8 @@ export class Engine {
   private jump: { t: number; id: string; local: number; swapped: boolean } | null = null
   /** true while something (e.g. the rotate gate) covers the scene — skip rendering */
   paused = false
+  private cutHold = 0
+  private cutPeakAt = -1e9
   /**
    * Ambient motion on/off. When off, frame.time holds still once the intro
    * reveal has had time to play (3 s after 'hark:reveal').
@@ -359,6 +361,8 @@ export class Engine {
    * built materials, geometry and textures upload before the reveal.
    */
   private async prewarm() {
+    // lit programs key on the environment map: give the scene its real one first
+    ;(this.world as unknown as { warmEnv?: () => void }).warmEnv?.()
     const target = this.post.composer.renderTarget1
     // Compile each chapter with ONLY its own group (and lights) visible:
     // three keys programs on the visible light set, so compiling everything at
@@ -421,7 +425,17 @@ export class Engine {
   }
 
   private layoutTrack() {
-    for (const slot of this.slots) slot.section.style.height = `${slot.def.length * this.vh}px`
+    for (const slot of this.slots) {
+      slot.section.style.height = `${slot.def.length * this.vh}px`
+      // the chapter's accessible copy sits inside its settled range, so a
+      // screen-reader cursor or Find in page scrolls the story to this chapter
+      const copy = slot.section.querySelector<HTMLElement>('.sr-copy')
+      if (copy) {
+        const at = slot.def.intro ?? slot.def.landing ?? 0.1
+        const top = Math.max(0, Math.min(at * slot.def.length + 1, slot.def.length - 1.2))
+        copy.style.top = `${top * this.vh}px`
+      }
+    }
     const tail = this.track.querySelector<HTMLElement>('.track-tail')
     if (tail) tail.style.height = `${this.vh}px`
   }
@@ -683,12 +697,20 @@ export class Engine {
     const cut = Math.max(scrollCut, fx)
     // which side of the cut we're on (the SEM beam scans down, then back into colour)
     this.post.cutSide = fx > scrollCut && this.jump ? (this.jump.swapped ? 1 : -1) : side
+    // cut budget (WCAG 2.3.1): while boundaries come fast (a quick scroll or
+    // a cut peaked < 0.5 s ago) hold the transition so they merge into one
+    // continuous sheet instead of a train of full-frame dips
+    const now = performance.now()
+    if (cut > 0.9) this.cutPeakAt = now
+    this.cutHold = Math.max(this.cutHold * Math.exp(-f.dt / 0.45), cut)
+    const rapid = now - this.cutPeakAt < 500 || Math.abs(f.velocity) > 3
+    const cutOut = rapid ? Math.max(cut, this.cutHold) : cut
     if (this.reducedMotion) {
-      // no ripples or flashes: a quiet dip to paper instead
+      // no ripples or flashes: a quiet, shallow dip instead
       this.post.transition = 0
-      this.post.fade = cut * 0.85
+      this.post.fade = cutOut * 0.35
     } else {
-      this.post.transition = cut
+      this.post.transition = cutOut
       this.post.fade = 0
     }
 

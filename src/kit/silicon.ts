@@ -109,6 +109,12 @@ export interface TraceOpts {
   color?: THREE.ColorRepresentation
   /** trace (copper under mask) colour */
   base?: THREE.ColorRepresentation
+  /** pulse shape: head length (fraction of the spacing, default 0.035) */
+  head?: number
+  /** where the tail starts (fraction of the spacing from the head, default 0.55: a 45% tail; 0.9 = a short tail) */
+  tail?: number
+  /** always-on base glow along live traces (default 0.06) */
+  baseGlow?: number
 }
 
 /**
@@ -178,6 +184,15 @@ export class Traces {
       new THREE.MeshStandardMaterial({ color: o.base ?? '#2a2f36', roughness: 0.35, metalness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
     )
     if (o.color) this.u.uColor.value.set(o.color)
+    // pulse shape options are applied to the shader text (the defaults below
+    // are the literal constants, so chapter-side patches keep matching)
+    const shape = (src: string) => {
+      let out = src
+      if (o.head !== undefined) out = out.replace('smoothstep(0.0, 0.035, 1.0 - ph)', `smoothstep(0.0, ${o.head.toFixed(4)}, 1.0 - ph)`)
+      if (o.tail !== undefined) out = out.replace('smoothstep(0.55, 1.0, ph) * 0.35', `smoothstep(${o.tail.toFixed(4)}, 1.0, ph) * 0.35`)
+      if (o.baseGlow !== undefined) out = out.replace('a += 0.06 * uGlow', `a += ${o.baseGlow.toFixed(4)} * uGlow`)
+      return out
+    }
     const pm = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
@@ -191,7 +206,7 @@ export class Traces {
         attribute float aSeed; varying vec2 vUv; varying float vSeed;
         void main() { vUv = uv; vSeed = aSeed; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
       `,
-      fragmentShader: /* glsl */ `
+      fragmentShader: shape(/* glsl */ `
         uniform float uTime, uFlow, uDensity, uGlow, uReach, uOffset; uniform vec3 uColor;
         varying vec2 vUv; varying float vSeed;
         void main() {
@@ -209,7 +224,7 @@ export class Traces {
           if (a <= 0.002) discard;
           gl_FragColor = vec4(uColor * a * 2.2, 1.0);
         }
-      `,
+      `),
     })
     this.pulses = new THREE.Mesh(g, pm)
     this.pulses.renderOrder = 2

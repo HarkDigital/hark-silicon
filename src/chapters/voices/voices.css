@@ -1,0 +1,293 @@
+/* ------------------------------------------------------------------
+   Wafer (voices) — the intro headline and the probe datasheet panel.
+   Every selector is scoped under .stage-voices.
+   ------------------------------------------------------------------ */
+
+.stage-voices .vw-intro {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  width: min(720px, calc(100vw - 2 * var(--gutter)));
+  display: grid;
+  justify-items: start;
+  gap: clamp(14px, 2.2vh, 22px);
+}
+.stage-voices .vw-eyebrow {
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+.stage-voices .vw-intro.is-on .vw-eyebrow {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.6s ease 0.05s,
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.05s;
+}
+.stage-voices .vw-title {
+  font-size: clamp(2.6rem, 6.2vw, 6.4rem);
+  line-height: 0.95;
+}
+
+/* ---------------- the datasheet panel ---------------- */
+
+.stage-voices .vw-panel {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--safe-bottom);
+  width: min(500px, 40vw);
+  margin: 0;
+  padding: 20px 24px 22px;
+  display: grid;
+  gap: 18px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(0, 14px, 0);
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s cubic-bezier(0.65, 0, 0.35, 1),
+    visibility 0s linear 0.35s;
+}
+.stage-voices .vw-panel.is-on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 0.5s ease,
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s linear 0s;
+}
+
+/* header: the wafer map + the probe readout */
+.stage-voices .vw-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.stage-voices .vw-map {
+  display: block;
+  width: 76px;
+  height: 76px;
+  overflow: visible;
+}
+.stage-voices .vw-map-wafer {
+  fill: rgba(238, 241, 244, 0.04);
+  stroke: rgba(238, 241, 244, 0.42);
+  stroke-width: 0.8;
+}
+.stage-voices .vw-map-grid {
+  fill: rgba(238, 241, 244, 0.16);
+}
+.stage-voices .vw-map rect {
+  fill: rgba(238, 241, 244, 0.16);
+  stroke: rgba(238, 241, 244, 0.85);
+  stroke-width: 0.7;
+  transition:
+    fill 0.4s ease,
+    stroke 0.4s ease;
+}
+.stage-voices .vw-map rect.is-past {
+  fill: rgba(0, 255, 133, 0.5);
+  stroke: rgba(0, 255, 133, 0.7);
+}
+.stage-voices .vw-map rect.is-on {
+  fill: var(--signal);
+  stroke: var(--signal);
+}
+.stage-voices .vw-map-probe line {
+  stroke: var(--signal);
+  stroke-width: 0.9;
+}
+.stage-voices .vw-map-probe {
+  transition: transform 0.5s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.stage-voices .vw-meta {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.stage-voices .vw-meta p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.stage-voices .vw-meta .vw-count {
+  font-size: 11px;
+  color: var(--fg);
+}
+.stage-voices .vw-count b {
+  font-weight: 600;
+  color: var(--signal);
+}
+.stage-voices .vw-bin {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.stage-voices .vw-bin::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(238, 241, 244, 0.4);
+  transition:
+    background-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+.stage-voices .vw-bin.is-on {
+  color: var(--fg);
+}
+.stage-voices .vw-bin.is-on::before {
+  background: var(--signal);
+  box-shadow: 0 0 8px rgba(0, 255, 133, 0.8);
+}
+
+/* the cards stack in one place; the stack's height glides to the active one */
+.stage-voices .vw-stack {
+  position: relative;
+  height: 0;
+  transition: height 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.stage-voices .vw-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  visibility: hidden;
+  transition: visibility 0s linear 0.35s;
+}
+.stage-voices .vw-card.is-on {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.stage-voices .vw-quote {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.75vw, 1.85rem);
+  line-height: 1.24;
+  letter-spacing: -0.022em;
+  text-indent: -0.42em;
+}
+.stage-voices .vw-card--long .vw-quote {
+  font-size: clamp(1.08rem, 1.5vw, 1.6rem);
+}
+.stage-voices .vw-quote .rise-w,
+.stage-voices .vw-quote .rise-w > span {
+  text-indent: 0;
+}
+/* the incoming quote waits for the outgoing one to clear; even long quotes
+   clock in within ~1 s */
+.stage-voices .vw-card .rise.is-in .rise-w > span,
+.stage-voices .vw-card .rise.is-in .rise-w > span::after {
+  transition-delay: calc(0.22s + min(var(--i, 0), 30) * 16ms);
+  animation-delay: calc(0.22s + min(var(--i, 0), 30) * 16ms);
+}
+
+.stage-voices .vw-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  margin: 16px 0 0;
+}
+.stage-voices .vw-who::before {
+  content: '';
+  width: 18px;
+  height: 2px;
+  background: linear-gradient(90deg, #e2b865, #a8792c);
+}
+.stage-voices .vw-name {
+  color: var(--fg);
+}
+.stage-voices .vw-co {
+  color: var(--fg-muted);
+}
+.stage-voices .vw-card .vw-who .rise.is-in .rise-w > span,
+.stage-voices .vw-card .vw-who .rise.is-in .rise-w > span::after {
+  transition-delay: calc(0.45s + var(--i, 0) * 30ms);
+  animation-delay: calc(0.45s + var(--i, 0) * 30ms);
+}
+
+/* ---------------- portrait: the die above, the panel below ---------------- */
+
+@media (max-aspect-ratio: 1/1) {
+  .stage-voices .vw-title {
+    font-size: clamp(2.3rem, 10.5vw, 4.6rem);
+  }
+  .stage-voices .vw-panel {
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 16px 18px 18px;
+    gap: 14px;
+  }
+  .stage-voices .vw-head {
+    gap: 14px;
+    padding-bottom: 12px;
+  }
+  .stage-voices .vw-map {
+    width: 58px;
+    height: 58px;
+  }
+  .stage-voices .vw-quote {
+    font-size: clamp(1.02rem, 4.5vw, 1.5rem);
+    line-height: 1.26;
+  }
+  .stage-voices .vw-card--long .vw-quote {
+    font-size: clamp(0.98rem, 4.15vw, 1.38rem);
+  }
+  .stage-voices .vw-who {
+    margin-top: 12px;
+  }
+}
+
+/* short landscape phones: thinner chrome bands, a compact panel */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-voices .vw-title {
+    font-size: clamp(1.9rem, 5.4vw, 2.8rem);
+  }
+  .stage-voices .vw-intro {
+    gap: 10px;
+  }
+  .stage-voices .vw-panel {
+    width: min(440px, 50vw);
+    padding: 12px 16px 14px;
+    gap: 10px;
+  }
+  .stage-voices .vw-head {
+    gap: 12px;
+    padding-bottom: 8px;
+  }
+  .stage-voices .vw-map {
+    width: 40px;
+    height: 40px;
+  }
+  .stage-voices .vw-meta {
+    gap: 2px;
+  }
+  .stage-voices .vw-meta p {
+    font-size: 10px;
+  }
+  .stage-voices .vw-quote,
+  .stage-voices .vw-card--long .vw-quote {
+    font-size: clamp(0.9rem, 2.2vw, 1.05rem);
+    line-height: 1.28;
+  }
+  .stage-voices .vw-who {
+    margin-top: 8px;
+  }
+}

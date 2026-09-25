@@ -1,0 +1,407 @@
+/* Die — the services chapter. Every selector is scoped to .stage-services. */
+
+.stage-services {
+  --sd-col: min(440px, 36vw);
+  --sd-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --sd-clock: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* empty boxes on the safe bands: the camera fit reads their offsets (hud.ts) */
+.stage-services .sd-probe {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  visibility: hidden;
+  pointer-events: none;
+}
+.stage-services .sd-probe--top {
+  top: var(--safe-top);
+}
+.stage-services .sd-probe--bottom {
+  bottom: var(--safe-bottom);
+}
+
+/* ---------------- intro ---------------- */
+.stage-services .sd-intro {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  width: min(620px, 46vw);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 24px;
+  pointer-events: none;
+}
+.stage-services .sd-intro-eyebrow,
+.stage-services .sd-intro-spec {
+  opacity: 0;
+  transform: translate3d(-8px, 0, 0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.4s var(--sd-ease);
+}
+.stage-services .sd-intro.is-on .sd-intro-eyebrow,
+.stage-services .sd-intro.is-on .sd-intro-spec {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.5s ease,
+    transform 0.8s var(--sd-ease);
+}
+.stage-services .sd-intro.is-on .sd-intro-spec {
+  transition-delay: 0.35s;
+}
+.stage-services .sd-intro-title {
+  font-size: clamp(3rem, 6vw, 6.2rem);
+  max-width: 11ch;
+  text-shadow: 0 2px 24px rgba(3, 4, 8, 0.55);
+}
+.stage-services .sd-intro-spec {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  color: var(--fg-muted);
+}
+.stage-services .sd-intro-spec span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  background: rgba(5, 7, 11, 0.62);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.stage-services .sd-intro-spec span::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: var(--gold);
+}
+
+/* ---------------- the datasheet panel ---------------- */
+.stage-services .sd-col {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  width: var(--sd-col);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(-10px, 0, 0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.4s ease,
+    visibility 0s linear 0.4s;
+}
+.stage-services .sd-col.is-on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 0.6s var(--sd-ease),
+    transform 0.9s var(--sd-ease),
+    visibility 0s;
+}
+.stage-services .sd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px 16px;
+}
+.stage-services .sd-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--fg-muted);
+}
+.stage-services .sd-led {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  background: var(--signal);
+  box-shadow: 0 0 10px rgba(0, 255, 133, 0.8);
+}
+.stage-services .sd-cur {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.stage-services .sd-of {
+  white-space: pre;
+}
+.stage-services .sd-code {
+  margin-left: auto;
+  color: var(--signal);
+  letter-spacing: 0.08em;
+}
+
+/* all eleven share one grid cell, so the panel never jumps */
+.stage-services .sd-stack {
+  display: grid;
+}
+.stage-services .sd-item {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  visibility: hidden;
+  transition: visibility 0s linear 0.3s;
+}
+.stage-services .sd-item.is-on {
+  visibility: visible;
+  transition: visibility 0s;
+}
+.stage-services .sd-title {
+  font-size: clamp(1.9rem, 2.7vw, 2.7rem);
+  line-height: 1.02;
+}
+.stage-services .sd-blurb {
+  max-width: 42ch;
+}
+/* content settles on the panel floor: shorter items leave air under the header, not a hole above the index */
+.stage-services .sd-item > :first-child {
+  margin-top: auto;
+}
+.stage-services .sd-blurb,
+.stage-services .sd-tags {
+  opacity: 0;
+  transform: translate3d(-6px, 0, 0);
+  transition:
+    opacity 0.2s ease,
+    transform 0.25s ease;
+}
+.stage-services .sd-item.is-on .sd-blurb,
+.stage-services .sd-item.is-on .sd-tags {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.45s ease 0.16s,
+    transform 0.6s var(--sd-ease) 0.16s;
+}
+.stage-services .sd-item.is-on .sd-tags {
+  transition-delay: 0.26s;
+}
+
+/* 01–11: tiny die blocks; the lit one is a signal pad, visited ones keep a trace */
+.stage-services .sd-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.stage-services .sd-keys {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 3px;
+}
+.stage-services .sd-key {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  min-width: 24px;
+  min-height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(238, 241, 244, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(238, 241, 244, 0.14);
+  clip-path: polygon(5px 0, 100% 0, 100% 100%, 0 100%, 0 5px);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-faint);
+  cursor: pointer;
+  transition:
+    color 0.25s ease,
+    background 0.3s ease,
+    box-shadow 0.3s ease;
+}
+.stage-services .sd-key::after {
+  content: '';
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  bottom: 3px;
+  height: 2px;
+  background: var(--signal);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.stage-services .sd-key.is-past {
+  color: var(--fg-muted);
+}
+.stage-services .sd-key.is-past::after {
+  opacity: 0.45;
+}
+.stage-services .sd-key:hover {
+  color: var(--fg);
+  background: rgba(238, 241, 244, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(238, 241, 244, 0.32);
+}
+.stage-services .sd-key.is-on {
+  color: #02140b;
+  font-weight: 600;
+  background: var(--signal);
+  box-shadow: 0 0 16px rgba(0, 255, 133, 0.35);
+}
+.stage-services .sd-key.is-on::after {
+  opacity: 0;
+}
+
+/* ---------------- mid-size landscape ---------------- */
+@media (orientation: landscape) and (max-width: 1100px) {
+  .stage-services {
+    --sd-col: min(400px, 40vw);
+  }
+  .stage-services .sd-card {
+    gap: 13px;
+    padding: 20px 22px 14px;
+  }
+  .stage-services .sd-title {
+    font-size: clamp(1.7rem, 3vw, 2.3rem);
+  }
+  .stage-services .sd-blurb {
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+}
+
+/* ---------------- portrait: the die above, the datasheet below ---------------- */
+@media (orientation: portrait) {
+  /* a scrim under the intro: the package leads behind the headline must never cost contrast */
+  .stage-services .sd-intro::before {
+    content: '';
+    position: absolute;
+    left: calc(-1 * var(--gutter));
+    right: calc(-1 * var(--gutter));
+    top: -56px;
+    bottom: calc(-1 * var(--safe-bottom));
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(4, 5, 9, 0) 0, rgba(4, 5, 9, 0.78) 56px, rgba(4, 5, 9, 0.9) 100%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .stage-services .sd-intro.is-on::before {
+    opacity: 1;
+  }
+  .stage-services .sd-col {
+    top: auto;
+    right: var(--gutter);
+    width: auto;
+    display: block;
+  }
+  .stage-services .sd-intro {
+    top: auto;
+    right: var(--gutter);
+    width: auto;
+    gap: 16px;
+    justify-content: flex-end;
+  }
+  .stage-services .sd-intro-title {
+    font-size: clamp(2.6rem, 10.5vw, 4.6rem);
+  }
+}
+@media (orientation: portrait) and (min-width: 640px) {
+  .stage-services .sd-col {
+    right: auto;
+    width: min(560px, calc(100vw - 2 * var(--gutter)));
+  }
+}
+@media (orientation: portrait) and (max-width: 639px) {
+  .stage-services .sd-card {
+    gap: 11px;
+    padding: 16px 16px 12px;
+  }
+  .stage-services .sd-item {
+    gap: 10px;
+  }
+  .stage-services .sd-title {
+    font-size: 1.6rem;
+    line-height: 1.04;
+  }
+  .stage-services .sd-blurb {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .stage-services .sd-tags .hud-tag {
+    font-size: 9.5px;
+    padding: 4px 8px;
+  }
+  .stage-services .sd-foot {
+    padding-top: 10px;
+  }
+  .stage-services .sd-keys {
+    gap: 2px;
+  }
+  .stage-services .sd-key {
+    min-height: 26px;
+    font-size: 10px;
+    letter-spacing: 0;
+    clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  }
+}
+/* short phones: keep the die visible — tighter type, tags live in the copy layer */
+@media (orientation: portrait) and (max-width: 639px) and (max-height: 720px) {
+  .stage-services .sd-title {
+    font-size: 1.35rem;
+  }
+  .stage-services .sd-blurb {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .stage-services .sd-tags {
+    display: none;
+  }
+  .stage-services .sd-intro-spec {
+    display: none;
+  }
+}
+
+/* ---------------- short landscape phones: thin chrome bands ---------------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-services {
+    --sd-col: min(380px, 46vw);
+  }
+  .stage-services .sd-card {
+    gap: 7px;
+    padding: 11px 14px 8px;
+  }
+  .stage-services .sd-item {
+    gap: 6px;
+  }
+  .stage-services .sd-title {
+    font-size: 1.25rem;
+  }
+  .stage-services .sd-blurb {
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  .stage-services .sd-tags {
+    display: none;
+  }
+  .stage-services .sd-foot {
+    padding-top: 6px;
+  }
+  .stage-services .sd-key {
+    min-height: 24px;
+    font-size: 9.5px;
+    letter-spacing: 0;
+  }
+  .stage-services .sd-intro {
+    gap: 10px;
+  }
+  .stage-services .sd-intro-title {
+    font-size: clamp(2rem, 7vw, 3rem);
+  }
+  .stage-services .sd-intro-spec {
+    display: none;
+  }
+}

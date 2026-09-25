@@ -1,0 +1,240 @@
+/* HERO — "Package". Everything scoped under .stage-hero. */
+
+/* ---------------- intro: the datasheet ---------------- */
+.stage-hero .hs-intro {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--safe-bottom);
+  width: min(420px, calc(100vw - 2 * var(--gutter)));
+  /* the sheet wipes on left → right behind a signal edge once the board powers on */
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.9s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.stage-hero .hs-intro::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--signal);
+  box-shadow: 0 0 12px var(--signal);
+  opacity: 0;
+  pointer-events: none;
+}
+.stage-hero .hs-intro.is-in {
+  clip-path: inset(0 0 0 0);
+}
+.stage-hero .hs-intro.is-in::after {
+  animation: hs-edge 0.9s cubic-bezier(0.65, 0, 0.35, 1) 1 both;
+}
+@keyframes hs-edge {
+  0% {
+    left: 0;
+    opacity: 1;
+  }
+  88% {
+    left: calc(100% - 2px);
+    opacity: 1;
+  }
+  100% {
+    left: calc(100% - 2px);
+    opacity: 0;
+  }
+}
+
+.stage-hero .hs-sheet {
+  display: grid;
+  gap: 14px;
+  padding: 18px 22px 16px;
+}
+.stage-hero .hs-sheet-head,
+.stage-hero .hs-sheet-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.stage-hero .hs-sheet-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.stage-hero .hs-rev {
+  color: var(--gold);
+}
+.stage-hero .hs-manifesto {
+  color: rgba(238, 241, 244, 0.86);
+  max-width: 40ch;
+}
+.stage-hero .hs-rule {
+  margin: 0;
+}
+.stage-hero .hs-sheet-foot .hud-label {
+  margin: 0;
+}
+.stage-hero .hs-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg);
+}
+.stage-hero .hs-hint-arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+  background: rgba(0, 255, 133, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 133, 0.5);
+  color: var(--signal);
+  font-size: 11px;
+  line-height: 1;
+}
+.stage-hero .hs-intro.is-in .hs-hint-arrow {
+  animation: hs-nudge 1.6s cubic-bezier(0.65, 0, 0.35, 1) 1.2s 3 both;
+}
+@keyframes hs-nudge {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(3px);
+  }
+}
+.stage-hero .hs-spec {
+  color: var(--fg-faint);
+  white-space: nowrap;
+  text-transform: none;
+}
+
+/* ---------------- payoff: tagline + CTAs ---------------- */
+.stage-hero .hs-payoff {
+  position: absolute;
+  inset: 0;
+}
+.stage-hero .hs-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(4, 6, 9, 0.78) 0%, rgba(4, 6, 9, 0.52) 34%, rgba(4, 6, 9, 0) 58%);
+}
+.stage-hero .hs-payoff-inner {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  width: min(50vw, 760px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 22px;
+}
+.stage-hero .hs-locale {
+  margin: 0;
+  color: var(--fg-muted);
+}
+.stage-hero .hs-title {
+  font-size: clamp(3rem, 7.2vw, 7.8rem);
+}
+.stage-hero .hs-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* probe callouts (written in caps already; the transform would turn MHz into MHZ) */
+.stage-hero .hs-callout .callout-label {
+  background: rgba(6, 8, 11, 0.86);
+  text-transform: none;
+}
+
+/* ---------------- portrait: the chip above, copy below ---------------- */
+@media (max-aspect-ratio: 1/1) {
+  .stage-hero .hs-intro {
+    right: var(--gutter);
+    width: auto;
+    max-width: 560px;
+  }
+  .stage-hero .hs-scrim {
+    background: linear-gradient(0deg, rgba(4, 6, 9, 0.84) 0%, rgba(4, 6, 9, 0.6) 34%, rgba(4, 6, 9, 0) 56%);
+  }
+  .stage-hero .hs-payoff-inner {
+    right: var(--gutter);
+    width: auto;
+    justify-content: flex-end;
+    gap: 16px;
+  }
+  .stage-hero .hs-title {
+    font-size: clamp(2.7rem, 12vw, 6rem);
+  }
+}
+
+@media (max-width: 520px) {
+  .stage-hero .hs-sheet {
+    gap: 12px;
+    padding: 16px 16px 14px;
+  }
+  .stage-hero .hs-manifesto {
+    font-size: 14.5px;
+    line-height: 1.52;
+  }
+  .stage-hero .hs-spec {
+    display: none;
+  }
+  .stage-hero .hs-ctas .hud-btn {
+    padding: 12px 16px;
+  }
+}
+
+/* short landscape phones: thin bands, compact copy */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-hero .hs-intro {
+    width: min(380px, 50vw);
+  }
+  .stage-hero .hs-sheet {
+    gap: 8px;
+    padding: 12px 14px 10px;
+  }
+  .stage-hero .hs-sheet-head {
+    padding-bottom: 6px;
+  }
+  .stage-hero .hs-manifesto {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .stage-hero .hs-spec {
+    display: none;
+  }
+  .stage-hero .hs-payoff-inner {
+    gap: 10px;
+  }
+  .stage-hero .hs-title {
+    font-size: clamp(2rem, 7vw, 3.2rem);
+  }
+  .stage-hero .hs-ctas {
+    margin-top: 0;
+  }
+  .stage-hero .hs-ctas .hud-btn {
+    padding: 10px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-hero .hs-intro {
+    transition: none;
+  }
+  .stage-hero .hs-intro::after,
+  .stage-hero .hs-intro.is-in::after,
+  .stage-hero .hs-intro.is-in .hs-hint-arrow {
+    animation: none;
+  }
+}

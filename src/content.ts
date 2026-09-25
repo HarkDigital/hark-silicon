@@ -23,6 +23,7 @@ export const CONCEPTS = [
   { name: 'Town', slug: 'hark-town' },
   { name: 'Arcade', slug: 'hark-arcade' },
   { name: 'Glass', slug: 'hark-glass' },
+  { name: 'Tower', slug: 'hark-tower' },
 ].map(c => ({ ...c, url: `https://harkdigital.github.io/${c.slug}/` }))
 
 /** The other concepts (everything except this one). */
@@ -379,6 +380,7 @@ export const MICROCOPY = {
   signalEyebrow: 'Hark Digital Design',
   scrollHint: 'Scroll to zoom in',
   audio: 'Sound',
+  motion: 'Motion',
   audioOn: 'On',
   audioOff: 'Off',
 }

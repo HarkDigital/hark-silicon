@@ -1,0 +1,555 @@
+/* ------------------------------------------------------------------
+   POWER ON — the contact chapter's datasheet panel. Left and vertically
+   centred on landscape, along the bottom on portrait. The address is the
+   primary action (a big lit signal pad). Every selector is scoped to
+   .stage-contact.
+   ------------------------------------------------------------------ */
+
+.stage-contact .pw-probe {
+  position: absolute;
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  left: var(--gutter);
+  right: var(--gutter);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.stage-contact .pw-wrap {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  width: clamp(392px, 36vw, 548px);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.stage-contact .pw-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: clamp(22px, 2.4vw, 36px) clamp(22px, 2.4vw, 36px) clamp(18px, 1.9vw, 26px);
+  background: rgba(8, 10, 13, 0.86);
+  will-change: opacity, transform;
+}
+
+/* ---- head: eyebrow + the PWR status pin */
+.stage-contact .pw-head {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: clamp(14px, 1.5vw, 22px);
+}
+.stage-contact .pw-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+.stage-contact .pw-part {
+  padding-left: 8px;
+  margin-left: 1px;
+  border-left: 1px solid var(--line-strong);
+}
+.stage-contact .pw-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1d2420;
+  box-shadow: inset 0 0 0 1px rgba(238, 241, 244, 0.22);
+  transition:
+    background 0.35s ease,
+    box-shadow 0.35s ease;
+}
+.stage-contact .pw-status.is-on .pw-led {
+  background: var(--signal);
+  box-shadow:
+    0 0 0 1px rgba(0, 255, 133, 0.5),
+    0 0 10px rgba(0, 255, 133, 0.75);
+}
+
+.stage-contact .pw-title {
+  font-size: clamp(3.2rem, 5.7vw, 6.1rem);
+  line-height: 0.92;
+  margin-bottom: clamp(14px, 1.5vw, 20px);
+  white-space: nowrap;
+}
+
+.stage-contact .pw-body {
+  max-width: 42ch;
+  margin-bottom: clamp(18px, 1.9vw, 28px);
+}
+
+/* ---- the address: the primary action */
+.stage-contact .pw-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+}
+.stage-contact .pw-mail {
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.25vw, 18.5px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  padding: 16px 22px 16px 18px;
+  gap: 12px;
+}
+.stage-contact .pw-ico {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: block;
+}
+.stage-contact .pw-go {
+  display: inline-block;
+  font-family: var(--font-mono);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.stage-contact .pw-mail:hover .pw-go,
+.stage-contact .pw-mail:focus-visible .pw-go {
+  transform: translateX(4px);
+}
+
+/* the copy button: its labels share one cell so the width never jumps */
+.stage-contact .pw-copy {
+  display: inline-grid;
+  align-items: center;
+  padding: 16px 18px;
+}
+.stage-contact .pw-copy > span {
+  grid-area: 1 / 1;
+  text-align: center;
+  transition: opacity 0.3s ease;
+}
+.stage-contact .pw-copy .pw-copy-done,
+.stage-contact .pw-copy .pw-copy-fail,
+.stage-contact .pw-copy.is-copied .pw-copy-idle,
+.stage-contact .pw-copy.is-failed .pw-copy-idle {
+  opacity: 0;
+}
+.stage-contact .pw-copy.is-copied .pw-copy-done,
+.stage-contact .pw-copy.is-failed .pw-copy-fail {
+  opacity: 1;
+}
+.stage-contact .pw-copy.is-copied {
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 133, 0.7);
+}
+.stage-contact .pw-copy.is-copied .pw-copy-done {
+  color: var(--signal);
+}
+
+/* narrow landscape panels (≈1024px): keep the address and Copy email on one row */
+@media (max-width: 1180px) {
+  .stage-contact .pw-mail {
+    font-size: 15.5px;
+    padding: 15px 14px 15px 13px;
+    gap: 9px;
+  }
+  .stage-contact .pw-copy {
+    padding: 15px 13px;
+  }
+}
+
+.stage-contact .pw-rule {
+  align-self: stretch;
+  margin: clamp(18px, 1.9vw, 26px) 0 clamp(12px, 1.3vw, 16px);
+}
+
+/* ---- other concepts: a little pin table */
+.stage-contact .pw-more {
+  align-self: stretch;
+  display: grid;
+  gap: 6px;
+}
+.stage-contact .pw-more-label {
+  margin: 0;
+  color: var(--fg-faint);
+}
+.stage-contact .pw-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: 0 30px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stage-contact .pw-link,
+.stage-contact .pw-top {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
+  line-height: 1.85;
+  color: var(--fg);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 0.25s ease;
+}
+.stage-contact .pw-pin {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+  min-width: 2.1em;
+}
+.stage-contact .pw-arr {
+  color: var(--signal);
+  font-size: 0.86em;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.stage-contact .pw-link:hover,
+.stage-contact .pw-link:focus-visible,
+.stage-contact .pw-top:hover,
+.stage-contact .pw-top:focus-visible {
+  color: var(--signal);
+}
+.stage-contact .pw-link:hover .pw-arr,
+.stage-contact .pw-link:focus-visible .pw-arr {
+  transform: translate(2px, -2px);
+}
+.stage-contact .pw-top:hover .pw-arr,
+.stage-contact .pw-top:focus-visible .pw-arr {
+  transform: translateY(-2px);
+}
+
+/* ---- colophon */
+.stage-contact .pw-foot {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 18px;
+  margin-top: clamp(12px, 1.3vw, 18px);
+  padding-top: clamp(10px, 1vw, 14px);
+  border-top: 1px solid var(--line);
+}
+.stage-contact .pw-top {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 24px;
+}
+.stage-contact .pw-legal {
+  margin: 0;
+  text-wrap: balance;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.6;
+  color: var(--fg-faint);
+}
+.stage-contact .pw-nw {
+  white-space: nowrap;
+}
+
+/* ---- fit levels (measured in hud.ts): short screens step the panel down.
+   Links never drop below a 24px-tall target (WCAG 2.5.8). */
+.stage-contact.pw-fit-1 .pw-title {
+  font-size: clamp(2.8rem, 4.8vw, 5.2rem);
+}
+.stage-contact.pw-fit-1 .pw-body {
+  font-size: 14.5px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.stage-contact.pw-fit-1 .pw-rule {
+  margin: 16px 0 10px;
+}
+.stage-contact.pw-fit-1 .pw-head {
+  margin-bottom: 12px;
+}
+
+.stage-contact.pw-fit-2 .pw-panel {
+  padding: 18px 22px 14px;
+}
+.stage-contact.pw-fit-2 .pw-title {
+  font-size: clamp(2.4rem, 4vw, 4.2rem);
+  margin-bottom: 10px;
+}
+.stage-contact.pw-fit-2 .pw-body {
+  font-size: 13.5px;
+  line-height: 1.46;
+  margin-bottom: 13px;
+}
+.stage-contact.pw-fit-2 .pw-mail,
+.stage-contact.pw-fit-2 .pw-copy {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.stage-contact.pw-fit-2 .pw-rule {
+  margin: 12px 0 8px;
+}
+.stage-contact.pw-fit-2 .pw-link {
+  font-size: 13.5px;
+  line-height: 24px;
+}
+.stage-contact.pw-fit-2 .pw-foot {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.stage-contact.pw-fit-3 .pw-head {
+  margin-bottom: 8px;
+}
+.stage-contact.pw-fit-3 .pw-title {
+  font-size: clamp(2.1rem, 3.4vw, 3.3rem);
+  margin-bottom: 8px;
+}
+.stage-contact.pw-fit-3 .pw-body {
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 11px;
+}
+.stage-contact.pw-fit-3 .pw-mail,
+.stage-contact.pw-fit-3 .pw-copy {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.stage-contact.pw-fit-3 .pw-rule {
+  margin: 10px 0 6px;
+}
+.stage-contact.pw-fit-3 .pw-more {
+  gap: 2px;
+}
+.stage-contact.pw-fit-3 .pw-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+.stage-contact.pw-fit-3 .pw-pin {
+  display: none;
+}
+.stage-contact.pw-fit-3 .pw-link {
+  font-size: 13px;
+  line-height: 24px;
+}
+.stage-contact.pw-fit-3 .pw-legal {
+  font-size: 9px;
+}
+
+/* ---- portrait: the panel runs along the bottom, the board lives above it
+   (short landscape phones stay side by side; keep in sync with PORTRAIT_QUERY) */
+@media (max-width: 767px) and (orientation: portrait), (max-width: 767px) and (min-height: 501px), (max-aspect-ratio: 9/10) {
+  .stage-contact .pw-wrap {
+    top: auto;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: var(--safe-bottom);
+    width: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+  }
+  .stage-contact .pw-panel {
+    max-width: 640px;
+    padding: 24px 26px 18px;
+  }
+  .stage-contact .pw-title {
+    font-size: clamp(2.7rem, 11vw, 5.2rem);
+  }
+  .stage-contact .pw-body {
+    max-width: 52ch;
+  }
+  .stage-contact .pw-links {
+    grid-template-columns: repeat(3, minmax(0, max-content));
+    gap: 0 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stage-contact .pw-panel {
+    padding: 18px 18px 14px;
+  }
+  .stage-contact .pw-head {
+    margin-bottom: 12px;
+  }
+  .stage-contact .pw-part {
+    display: none;
+  }
+  .stage-contact .pw-title {
+    margin-bottom: 10px;
+  }
+  .stage-contact .pw-body {
+    font-size: 14px;
+    line-height: 1.48;
+    margin-bottom: 15px;
+  }
+  .stage-contact .pw-cta {
+    gap: 8px;
+    align-self: stretch;
+    flex-wrap: nowrap;
+  }
+  .stage-contact .pw-mail {
+    flex: 1 1 auto;
+    justify-content: center;
+    font-size: 16px;
+    padding: 14px 14px;
+    gap: 9px;
+    min-width: 0;
+  }
+  .stage-contact .pw-copy {
+    flex: none;
+    padding: 14px 14px;
+  }
+  /* "Copy" is enough on a phone */
+  .stage-contact .pw-copy-more {
+    display: none;
+  }
+  .stage-contact .pw-rule {
+    margin: 14px 0 8px;
+  }
+  .stage-contact .pw-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 16px;
+  }
+  .stage-contact .pw-pin,
+  .stage-contact .pw-go {
+    display: none;
+  }
+  .stage-contact .pw-link {
+    font-size: 13.5px;
+    line-height: 26px;
+  }
+  .stage-contact .pw-foot {
+    margin-top: 8px;
+    padding-top: 6px;
+    gap: 2px 14px;
+  }
+  .stage-contact .pw-legal {
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
+}
+@media (max-width: 360px) {
+  .stage-contact .pw-ico {
+    display: none;
+  }
+}
+
+/* ---- short landscape phones: thin chrome bands, a compact, wider panel */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-contact .pw-wrap {
+    width: min(500px, 58vw);
+  }
+  .stage-contact .pw-panel {
+    padding: 11px 16px 9px;
+  }
+  .stage-contact .pw-head {
+    margin-bottom: 4px;
+  }
+  .stage-contact .pw-eyebrow {
+    font-size: 10px;
+  }
+  .stage-contact .pw-title {
+    font-size: clamp(1.7rem, 7vh, 2.3rem);
+    margin-bottom: 4px;
+  }
+  .stage-contact .pw-body {
+    font-size: 11.5px;
+    line-height: 1.38;
+    margin-bottom: 8px;
+    max-width: none;
+  }
+  .stage-contact .pw-mail {
+    font-size: 14.5px;
+    padding: 8px 14px 8px 12px;
+  }
+  .stage-contact .pw-copy {
+    padding: 8px 14px;
+  }
+  .stage-contact .pw-ico {
+    width: 17px;
+    height: 17px;
+  }
+  .stage-contact .pw-rule {
+    display: none;
+  }
+  .stage-contact .pw-more {
+    gap: 0;
+    margin-top: 7px;
+  }
+  .stage-contact .pw-more-label {
+    font-size: 9.5px;
+    line-height: 1.4;
+  }
+  .stage-contact .pw-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 12px;
+  }
+  .stage-contact .pw-pin {
+    display: none;
+  }
+  .stage-contact .pw-link {
+    font-size: 12.5px;
+    line-height: 24px;
+  }
+  .stage-contact .pw-foot {
+    margin-top: 2px;
+    padding-top: 2px;
+    border-top: 0;
+    gap: 0 14px;
+  }
+  .stage-contact .pw-legal {
+    font-size: 8.5px;
+    letter-spacing: 0.03em;
+  }
+}
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 740px) {
+  .stage-contact .pw-panel {
+    padding: 9px 14px 7px;
+  }
+  .stage-contact .pw-status {
+    display: none;
+  }
+  .stage-contact .pw-title {
+    font-size: clamp(1.5rem, 6.4vh, 2rem);
+  }
+  .stage-contact .pw-body {
+    font-size: 11px;
+    line-height: 1.34;
+    margin-bottom: 6px;
+  }
+  .stage-contact .pw-mail {
+    font-size: 14px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+  .stage-contact .pw-copy {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+  .stage-contact .pw-more {
+    margin-top: 5px;
+  }
+}
+
+/* phones / scaled-down devices: no backdrop-filter over the canvas */
+.lowfx .stage-contact .pw-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(9, 11, 14, 0.93);
+}

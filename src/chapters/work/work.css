@@ -1,0 +1,426 @@
+/* ------------------------------------------------------------------
+   Board (work) — datasheet panels beside the motherboard.
+   Every selector is scoped under .stage-work.
+   ------------------------------------------------------------------ */
+
+.stage-work .wk-safe {
+  position: absolute;
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  left: var(--gutter);
+  right: var(--gutter);
+  visibility: hidden !important;
+  pointer-events: none;
+}
+
+/* ---------------- intro ---------------- */
+
+.stage-work .wk-intro {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  width: min(620px, calc(100vw - 2 * var(--gutter)));
+  display: grid;
+  justify-items: start;
+  gap: 18px;
+}
+.stage-work .wk-title {
+  font-size: clamp(2.6rem, 5.4vw, 5.6rem);
+  line-height: 0.95;
+}
+.stage-work .wk-spec {
+  --chamfer: 10px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 18px 12px 20px;
+  margin-top: 4px;
+}
+.stage-work .wk-spec-k {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.stage-work .wk-spec-v {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+.stage-work .wk-spec-v i {
+  display: inline-block;
+  width: 10px;
+  height: 6px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, #e2b865, #a8792c);
+}
+
+/* ---------------- docked datasheet panels ---------------- */
+
+.stage-work .wk-dock {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--safe-bottom);
+  width: clamp(330px, 34vw, 450px);
+  height: 0;
+}
+.stage-work .wk-dock--list {
+  width: clamp(400px, 42vw, 560px);
+}
+.stage-work .wk-card {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  visibility: hidden;
+  opacity: 0;
+}
+.stage-work .wk-dock--list .wk-card {
+  position: absolute;
+}
+
+.stage-work .wk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+.stage-work .wk-num {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+.stage-work .wk-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.stage-work .wk-stat i {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+}
+.stage-work .wk-stat--live {
+  color: var(--signal);
+}
+.stage-work .wk-stat--live i {
+  background: var(--signal);
+  box-shadow: 0 0 8px rgba(0, 255, 133, 0.85);
+}
+.stage-work .wk-stat--pre {
+  color: var(--amber);
+}
+.stage-work .wk-stat--pre i {
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.8);
+}
+.stage-work .wk-ind {
+  margin: 4px 0 0;
+}
+.stage-work .wk-name {
+  font-size: clamp(1.9rem, 2.8vw, 2.8rem);
+  line-height: 1;
+}
+.stage-work .wk-blurb {
+  max-width: 40ch;
+}
+.stage-work .wk-tags {
+  margin-top: 2px;
+}
+.stage-work .wk-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 6px;
+}
+.stage-work .wk-host {
+  color: var(--fg-faint);
+}
+.stage-work .wk-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+/* ---------------- the pinout table ---------------- */
+
+.stage-work .wk-pinout {
+  color: var(--fg-faint);
+}
+.stage-work .wk-list-title {
+  font-size: clamp(1.9rem, 2.8vw, 2.8rem);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stage-work .wk-thead,
+.stage-work .wk-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1.45fr) minmax(0, 1fr) 14px;
+  align-items: baseline;
+  gap: 10px;
+}
+.stage-work .wk-thead {
+  padding: 0 6px 6px;
+  border-bottom: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.stage-work .wk-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.stage-work .wk-row {
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--fg);
+  text-decoration: none;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.stage-work .wk-pin {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--fg-faint);
+}
+.stage-work .wk-rname {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.stage-work .wk-rind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stage-work .wk-arrow {
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-align: right;
+}
+.stage-work .wk-pre {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.stage-work .wk-row.is-cur,
+.stage-work .wk-row:hover,
+.stage-work .wk-row:focus-visible {
+  background: rgba(0, 255, 133, 0.07);
+  box-shadow: inset 2px 0 0 var(--signal);
+}
+.stage-work .wk-row.is-cur .wk-pin,
+.stage-work .wk-row:hover .wk-pin,
+.stage-work .wk-row:focus-visible .wk-pin,
+.stage-work .wk-row.is-cur .wk-arrow,
+.stage-work .wk-row:hover .wk-arrow {
+  color: var(--signal);
+}
+.stage-work .wk-row:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ---------------- portrait: subject up top, the datasheet below ---------------- */
+
+@media (max-aspect-ratio: 10/9) {
+  .stage-work .wk-intro {
+    gap: 14px;
+  }
+  .stage-work .wk-title {
+    font-size: clamp(2.5rem, 11vw, 4.6rem);
+  }
+  .stage-work .wk-dock,
+  .stage-work .wk-dock--list {
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+  }
+  .stage-work .wk-card {
+    padding: 18px 18px 16px;
+    gap: 8px;
+  }
+  .stage-work .wk-name,
+  .stage-work .wk-list-title {
+    font-size: clamp(1.7rem, 7.4vw, 2.6rem);
+  }
+  .stage-work .wk-blurb {
+    font-size: 14.5px;
+    line-height: 1.5;
+    max-width: none;
+  }
+  .stage-work .wk-row {
+    padding: 5px 6px;
+  }
+}
+@media (max-aspect-ratio: 10/9) and (max-width: 560px) {
+  .stage-work .wk-thead,
+  .stage-work .wk-row {
+    grid-template-columns: 26px minmax(0, 1fr) 14px;
+    gap: 8px;
+  }
+  .stage-work .wk-rind {
+    display: none;
+  }
+  .stage-work .wk-rname {
+    font-size: 13.5px;
+  }
+  .stage-work .wk-foot {
+    display: none;
+  }
+  .stage-work .wk-cta {
+    margin-top: 2px;
+  }
+  .stage-work .hud-btn {
+    padding: 11px 16px;
+  }
+}
+@media (max-aspect-ratio: 10/9) and (max-height: 720px) {
+  .stage-work .wk-card {
+    padding: 14px 16px 13px;
+    gap: 6px;
+  }
+  .stage-work .wk-head {
+    padding-bottom: 6px;
+  }
+  .stage-work .wk-blurb {
+    font-size: 13.5px;
+    line-height: 1.45;
+  }
+  .stage-work .wk-row {
+    padding: 3px 6px;
+  }
+  .stage-work .wk-thead {
+    display: none;
+  }
+  .stage-work .wk-name,
+  .stage-work .wk-list-title {
+    font-size: clamp(1.5rem, 6.6vw, 2rem);
+  }
+}
+
+/* ---------------- short landscape phones: thin bands, compact panels ---------------- */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-work .wk-intro {
+    gap: 8px;
+    width: min(460px, 60vw);
+  }
+  .stage-work .wk-title {
+    font-size: 2.2rem;
+  }
+  .stage-work .wk-spec {
+    padding: 8px 12px;
+  }
+  .stage-work .wk-dock {
+    width: min(360px, 46vw);
+  }
+  .stage-work .wk-dock--list {
+    width: min(420px, 52vw);
+  }
+  .stage-work .wk-card {
+    padding: 11px 14px 11px;
+    gap: 5px;
+  }
+  .stage-work .wk-head {
+    padding-bottom: 5px;
+  }
+  .stage-work .wk-name,
+  .stage-work .wk-list-title {
+    font-size: 1.45rem;
+  }
+  .stage-work .wk-blurb {
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  .stage-work .wk-foot,
+  .stage-work .wk-thead,
+  .stage-work .wk-tags {
+    display: none;
+  }
+  .stage-work .wk-cta {
+    margin-top: 2px;
+  }
+  .stage-work .hud-btn {
+    padding: 9px 14px;
+  }
+  .stage-work .wk-row {
+    padding: 1px 6px;
+  }
+  .stage-work .wk-rname {
+    font-size: 12.5px;
+  }
+}
+
+/* phones (no backdrop blur): the panels go near-opaque so board silkscreen never ghosts through */
+.lowfx .stage-work .hud-panel {
+  background: rgba(8, 10, 13, 0.975);
+}
+
+/* short landscape: the pinout folds into two columns of names */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stage-work .wk-rows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 14px;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(5, auto);
+  }
+  .stage-work .wk-row {
+    grid-template-columns: 22px minmax(0, 1fr) 12px;
+    gap: 6px;
+  }
+  .stage-work .wk-row .wk-rind {
+    display: none;
+  }
+  .stage-work .wk-row .wk-rname {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stage-work .wk-dock--list {
+    width: min(540px, 64vw);
+  }
+  .stage-work .wk-list-title {
+    margin-bottom: 0;
+  }
+}

@@ -77,11 +77,10 @@ const FRAG = /* glsl */ `
   uniform mat3 uViewRot;
   varying vec3 vDir;
   float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-  // a soft hexagonal aperture disc (6-blade iris), radius r
+  // a soft, nearly round aperture disc (a 9-blade iris reads round), radius r
   float hexDisc(vec2 p, float r) {
-    p = abs(p);
-    float d = max(dot(p, vec2(0.8660254, 0.5)), p.y);
-    return 1.0 - smoothstep(r * 0.75, r, d);
+    float d = length(p);
+    return 1.0 - smoothstep(r * 0.55, r, d);
   }
   void main() {
     vec3 v = uViewRot * normalize(vDir);
