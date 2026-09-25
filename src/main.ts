@@ -67,6 +67,14 @@ async function boot() {
   if (document.fonts?.ready) engine.assets.track(document.fonts.ready)
   await engine.load(CHAPTERS, params.get('only'))
 
+  // skip link mid-story: focus the current chapter's heading (no jump to the hero)
+  document.querySelector<HTMLAnchorElement>('.skip-link')?.addEventListener('click', e => {
+    const cur = engine.slots[engine.state.index]
+    if (!cur) return
+    e.preventDefault()
+    engine.focusChapter(cur.def.id)
+  })
+
   const sound = new Sound()
   const chrome = createChrome(document.getElementById('chrome')!, engine, sound)
   engine.onFrame.push((f, s) => {

@@ -75,7 +75,8 @@ const FinalShader = {
       v += (g - 0.5) * (0.12 + 0.55 * noise);
       // faint line structure of the raster
       v *= 0.94 + 0.06 * step(0.5, fract(row * 0.5));
-      v = mix(v, g, noise * noise);
+      // the micrograph survives the peak (beam noise, not TV static), and stays dark
+      v = mix(v, g * 0.5, 0.5 * noise * noise);
       return vec3(v) * vec3(0.93, 0.97, 1.0);
     }
 
@@ -112,10 +113,10 @@ const FinalShader = {
       }
       float m = max(covered, clamp(uSem, 0.0, 1.0));
       if (m > 0.001) {
-        float noise = smoothstep(0.62, 1.0, t);
+        float noise = smoothstep(0.78, 1.0, t);
         col = mix(col, sem(uv, noise), m);
       }
-      col += vec3(0.75, 0.95, 1.0) * beam * 0.55 * step(0.001, t) * (1.0 - smoothstep(0.9, 1.0, t));
+      col += vec3(0.75, 0.95, 1.0) * beam * 0.3 * step(0.001, t) * (1.0 - smoothstep(0.9, 1.0, t));
 
       col = mix(col, vec3(1.0), clamp(uFlash, 0.0, 1.0));
       float v = 1.0 - smoothstep(0.35, 1.05, length(c * vec2(1.0, 0.9)) * 1.4);

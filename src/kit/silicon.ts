@@ -54,6 +54,11 @@ function once<M extends THREE.Material>(key: string, make: () => M): M {
   return m
 }
 
+/**
+ * Materials drawn by an InstancedMesh must not also be drawn by a plain Mesh
+ * (three re-resolves the program on every draw). MAT.x() is for plain meshes;
+ * MATI.x() returns a cached instanced twin.
+ */
 export const MAT = {
   mask: () => once('mask', () => new THREE.MeshPhysicalMaterial({ color: S.mask, roughness: 0.55, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.4 })),
   gold: () => once('gold', () => new THREE.MeshStandardMaterial({ color: S.gold, roughness: 0.22, metalness: 1 })),
@@ -67,6 +72,26 @@ export const MAT = {
   /** emissive light (LEDs, lit pads); strength > 1 blooms */
   led: (color: THREE.ColorRepresentation = S.signal, strength = 3) =>
     once(`led:${new THREE.Color(color).getHexString()}:${strength}`, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(strength), toneMapped: false })),
+}
+
+const twins = new Map<THREE.Material, THREE.Material>()
+function twin<M extends THREE.Material>(m: M): M {
+  let t = twins.get(m) as M | undefined
+  if (!t) twins.set(m, (t = m.clone() as M))
+  return t
+}
+/** instanced twins of the kit materials (use these on InstancedMesh) */
+export const MATI = {
+  mask: () => twin(MAT.mask()),
+  gold: () => twin(MAT.gold()),
+  copper: () => twin(MAT.copper()),
+  tin: () => twin(MAT.tin()),
+  epoxy: () => twin(MAT.epoxy()),
+  aluminum: () => twin(MAT.aluminum()),
+  ceramic: () => twin(MAT.ceramic()),
+  fr4: () => twin(MAT.fr4()),
+  silk: () => twin(MAT.silk()),
+  led: (color: THREE.ColorRepresentation = S.signal, strength = 3) => twin(MAT.led(color, strength)),
 }
 
 /**
@@ -245,7 +270,7 @@ export class Traces {
 }
 
 /** Canvas texture helper. */
-function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, srgb = true): THREE.CanvasTexture {
+function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, srgb = true, text = true): THREE.CanvasTexture {
   const cv = document.createElement('canvas')
   cv.width = w
   cv.height = h
@@ -254,11 +279,13 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   const t = new THREE.CanvasTexture(cv)
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.anisotropy = 8
-  document.fonts?.ready.then(() => {
-    g.clearRect(0, 0, w, h)
-    draw(g)
-    t.needsUpdate = true
-  })
+  // redraw once web fonts are in — only for canvases that draw text
+  if (text)
+    document.fonts?.ready.then(() => {
+      g.clearRect(0, 0, w, h)
+      draw(g)
+      t.needsUpdate = true
+    })
   return t
 }
 
@@ -294,6 +321,8 @@ export interface PackageOpts {
   lines?: string[]
   /** etch the Hark mark on the lid */
   mark?: boolean
+  /** false = no etched top plane (callers that build their own lid) */
+  top?: boolean
 }
 
 /**
@@ -313,6 +342,10 @@ export function chipPackage(o: PackageOpts = {}): THREE.Group {
   g.add(body)
   // etched top: slightly lighter grey marks on the matte epoxy
   const lines = o.lines ?? []
+  if (o.top === false) {
+    addLeads()
+    return g
+  }
   const tex = canvasTex(1024, Math.round((1024 * d) / w), c => {
     const W = c.canvas.width
     const H = c.canvas.height
@@ -333,6 +366,9 @@ export function chipPackage(o: PackageOpts = {}): THREE.Group {
   top.position.y = body.position.y + h / 2 + 0.001
   g.add(top)
   g.userData.top = top
+  addLeads()
+  return g
+  function addLeads() {
   if (n > 0) {
     const pitch = Math.min((w * 0.8) / n, 0.13)
     const span = pitch * (n - 1)
@@ -354,7 +390,7 @@ export function chipPackage(o: PackageOpts = {}): THREE.Group {
             pad.translate(0.02, 0.01, 0)
             return pad
           })()
-    const leads = new THREE.InstancedMesh(leadGeo, MAT.tin(), n * 4)
+    const leads = new THREE.InstancedMesh(leadGeo, MATI.tin(), n * 4)
     const m = new THREE.Matrix4()
     const q = new THREE.Quaternion()
     let i = 0
@@ -371,7 +407,7 @@ export function chipPackage(o: PackageOpts = {}): THREE.Group {
     leads.castShadow = true
     g.add(leads)
   }
-  return g
+  }
 }
 
 export interface DieBlock {
@@ -490,7 +526,7 @@ export function dieTexture(o: { size?: number; seed?: number; blocks?: number } 
       g.lineTo(x, N - ring)
       g.stroke()
     }
-  })
+  }, true, false)
   return { texture, blocks }
 }
 
@@ -555,7 +591,7 @@ export function smdField(o: { x0: number; z0: number; x1: number; z1: number; co
   const capGeo = new THREE.BoxGeometry(0.1, 0.05, 0.05)
   const endGeo = new THREE.BoxGeometry(0.022, 0.052, 0.052)
   const bodies = new THREE.InstancedMesh(capGeo, new THREE.MeshStandardMaterial({ color: '#8a6a45', roughness: 0.6 }), o.count)
-  const ends = new THREE.InstancedMesh(endGeo, MAT.tin(), o.count * 2)
+  const ends = new THREE.InstancedMesh(endGeo, MATI.tin(), o.count * 2)
   const m = new THREE.Matrix4()
   const q = new THREE.Quaternion()
   let k = 0

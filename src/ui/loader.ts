@@ -14,7 +14,7 @@ import { mountRotateGate } from './rotate'
  *
  *   ~0.1 s   the POWER RAIL lights: a green signal races from J1 to U1 and
  *            the status LED comes on (steady; nothing here ever blinks)
- *   ~0.45 s  POST log: "VDD 1.8V ... OK", then "CLK 48 MHZ ... LOCK"
+ *   ~0.45 s  POST log: "VDD 1.8V ... OK", then "CLK 100 MHZ ... LOCK"
  *   then     "LOADING LEVELS ... n%" follows progress(), and the Hark mark
  *            etched on U1 is TRACED in signal green, loop by loop, as it loads
  *   finish() the signal completes the mark, the die lights (loops etched
@@ -171,7 +171,7 @@ export function createLoader(root: HTMLElement, { skip = false } = {}) {
       <div class="ld-log">
         <p class="ld-l ld-l--head is-on"><span>HARK-1 · REV A</span><span>POST</span></p>
         <p class="ld-l" data-l="vdd"><span>VDD 1.8V</span><i></i><b>OK</b></p>
-        <p class="ld-l" data-l="clk"><span>CLK 48 MHZ</span><i></i><b>LOCK</b></p>
+        <p class="ld-l" data-l="clk"><span>CLK 100 MHZ</span><i></i><b>LOCK</b></p>
         <p class="ld-l" data-l="lvl"><span>LOADING LEVELS</span><i></i><b class="ld-pct">0%</b></p>
         <p class="ld-l" data-l="sig"><span>SIGNAL</span><i></i><b>READY</b></p>
       </div>

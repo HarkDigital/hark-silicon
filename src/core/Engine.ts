@@ -211,6 +211,11 @@ export class Engine {
           return
         }
         this.running = false
+        try {
+          this.lenis?.destroy()
+        } catch {
+          /* not started */
+        }
         this.onContextGone?.()
       }, 3000)
     })
@@ -604,6 +609,38 @@ export class Engine {
     document.documentElement.classList.toggle('lowfx', this.mobile || this.dprScale < 0.99)
   }
 
+  /**
+   * Time-damp the chapter's camera pose (~0.2 s) so a brisk scroll can't
+   * swing large bright areas across the frame several times a second
+   * (WCAG 2.3.1). Snaps on nav jumps, chapter changes and teleports.
+   */
+  private camPos = new THREE.Vector3()
+  private camTgt = new THREE.Vector3()
+  private camFov = 45
+  private camReady = false
+  private camIndex = -1
+  private camLocal = 0
+  private dampPose(index: number, local: number, dt: number) {
+    const p = this.pose
+    const snap = !this.camReady || !!this.jump || index !== this.camIndex || Math.abs(local - this.camLocal) > 0.04
+    this.camIndex = index
+    this.camLocal = local
+    if (snap) {
+      this.camPos.copy(p.position)
+      this.camTgt.copy(p.target)
+      this.camFov = p.fov
+      this.camReady = true
+      return
+    }
+    const k = 1 - Math.exp(-dt / 0.2)
+    this.camPos.lerp(p.position, k)
+    this.camTgt.lerp(p.target, k)
+    this.camFov += (p.fov - this.camFov) * k
+    p.position.copy(this.camPos)
+    p.target.copy(this.camTgt)
+    p.fov = this.camFov
+  }
+
   private applyCamera(parallax: number) {
     const cam = this.camera
     const pose = this.pose
@@ -705,7 +742,8 @@ export class Engine {
     this.cutHold = Math.max(this.cutHold * Math.exp(-f.dt / 0.45), cut)
     const rapid = now - this.cutPeakAt < 500 || Math.abs(f.velocity) > 3
     const cutOut = rapid ? Math.max(cut, this.cutHold) : cut
-    if (this.reducedMotion) {
+    const calm = this.reducedMotion || !this.motion
+    if (calm) {
       // no ripples or flashes: a quiet, shallow dip instead
       this.post.transition = 0
       this.post.fade = cutOut * 0.35
@@ -758,11 +796,12 @@ export class Engine {
       if (!slot.failed) console.error(`[hark] chapter "${slot.def.id}" crashed in update`, err)
       slot.failed = true
     }
-    if (this.reducedMotion) {
+    if (this.reducedMotion || !this.motion) {
       this.post.params.flash = Math.min(this.post.params.flash, 0.08)
       this.post.params.glitch = 0
     }
-    this.applyCamera(this.reducedMotion ? 0 : this.pose.parallax)
+    this.dampPose(index, local, f.dt)
+    this.applyCamera(this.reducedMotion || !this.motion ? 0 : this.pose.parallax)
     this.world.update(f, this.camera)
 
     for (const fn of this.onFrame) {
