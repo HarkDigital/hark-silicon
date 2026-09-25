@@ -1,0 +1,81 @@
+/* Placeholder chapter layout (THEME: each chapter gets its own scoped CSS). */
+.ph-copy {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  max-width: min(560px, calc(100vw - 2 * var(--gutter)));
+  display: grid;
+  gap: 16px;
+}
+.ph-panel {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--safe-bottom);
+  width: min(460px, calc(100vw - 2 * var(--gutter)));
+  display: grid;
+  gap: 10px;
+}
+.ph-panel[hidden] {
+  display: none;
+}
+.ph-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.ph-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 16px;
+}
+.ph-list a {
+  color: var(--fg);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ph-list a:hover,
+.ph-list a:focus-visible {
+  color: var(--signal);
+}
+.ph-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ph-links a,
+.ph-links button {
+  color: var(--fg);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .ph-panel {
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+  }
+}
+/* on phones the copy block sits over the scene: give it a readable plate */
+@media (max-width: 760px) {
+  .ph-copy {
+    right: var(--gutter);
+    max-width: none;
+    padding: 16px 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+}

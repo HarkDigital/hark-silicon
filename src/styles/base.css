@@ -1,0 +1,554 @@
+/* ------------------------------------------------------------------
+   Hark concept starter — base tokens, layout and the shared HUD vocabulary.
+
+   Two parts:
+   1. STRUCTURE (keep): #gl / #track / #stages / .stage / #chrome / #loader,
+      the accessible copy layer (.sr-copy focus pills), .skip-link, reduced
+      motion. The engine and UI depend on these.
+   2. THEME (replace): tokens, fonts and the HUD vocabulary every chapter
+      uses — .hud-eyebrow .hud-title .hud-h2 .hud-body .hud-quote .hud-label
+      .hud-tags/.hud-tag .hud-btn(--ghost) .hud-panel .hud-rule .callout*
+      and the .rise word reveal. Stages over dark/light scenes can flip with
+      a class (e.g. .is-dark) that redefines the --fg tokens.
+
+   Rules learned the hard way: no color-mix() (Safari 15 + the minifier drops
+   fallbacks — use rgba tokens); write -webkit-backdrop-filter BEFORE
+   backdrop-filter; small text ≥ 4.5:1 on the real rendered background.
+   ------------------------------------------------------------------ */
+
+:root {
+  /* THEME tokens */
+  --bg: #0d0f12;
+  --ink: #0d0f12;
+  --paper: #f4f2ee;
+  --paper-2: #f4f2ee;
+  --signal: #00ff85;
+  --signal-deep: #00a857;
+
+  --fg: var(--paper);
+  --fg-muted: rgba(244, 242, 238, 0.78);
+  --fg-faint: rgba(244, 242, 238, 0.64);
+  --line: rgba(244, 242, 238, 0.16);
+  --line-strong: rgba(244, 242, 238, 0.38);
+  --panel: rgba(13, 15, 18, 0.72);
+
+  --font-display: 'Inter Variable', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /* STRUCTURE: the persistent chrome owns these bands (+ notch insets) */
+  --gutter: max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  --safe-top: calc(clamp(80px, 10.5vh, 112px) + env(safe-area-inset-top, 0px));
+  --safe-bottom: calc(clamp(82px, 10.5vh, 110px) + env(safe-area-inset-bottom, 0px));
+
+  color-scheme: dark;
+}
+
+/* example tone flip for light scenes: add .is-light to a stage */
+.is-light {
+  --fg: var(--ink);
+  --fg-muted: rgba(13, 15, 18, 0.74);
+  --fg-faint: rgba(13, 15, 18, 0.64);
+  --line: rgba(13, 15, 18, 0.14);
+  --line-strong: rgba(13, 15, 18, 0.32);
+  --panel: rgba(244, 242, 238, 0.82);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  overflow-x: clip;
+}
+@supports not (overflow: clip) {
+  body {
+    overflow-x: hidden;
+  }
+}
+
+html {
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+  display: none;
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--signal);
+  color: var(--bg);
+}
+
+a {
+  color: inherit;
+}
+
+#gl {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100lvh;
+  display: block;
+  z-index: 0;
+}
+
+#track {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+#track:focus {
+  outline: none;
+}
+#track:focus-within {
+  z-index: 30;
+}
+.chapter {
+  position: relative;
+  width: 100%;
+}
+
+#stages {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--fg);
+}
+.stage.is-active {
+  visibility: visible;
+}
+.stage:not(.is-active),
+.stage:not(.is-active) * {
+  visibility: hidden !important;
+}
+.stage a,
+.stage button,
+.stage .hud-interactive {
+  pointer-events: auto;
+}
+
+#chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+#chrome a,
+#chrome button,
+#chrome .hud-interactive {
+  pointer-events: auto;
+}
+
+#loader {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.is-dark :focus-visible {
+  outline-color: var(--paper-2);
+}
+
+/* ---------------- HUD vocabulary (THEME) ---------------- */
+
+.hud-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.hud-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg);
+  margin: 0;
+}
+.hud-eyebrow::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal);
+}
+
+.hud-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.92;
+  font-size: clamp(3rem, 8vw, 8rem);
+  margin: 0;
+  color: var(--fg);
+  text-wrap: balance;
+}
+.hud-h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+  font-size: clamp(2rem, 4.4vw, 4.2rem);
+  margin: 0;
+  color: var(--fg);
+  text-wrap: balance;
+}
+/* <em> = the accent word */
+.hud-title em,
+.hud-h2 em {
+  font-style: normal;
+  color: var(--signal);
+}
+.is-light .hud-title em,
+.is-light .hud-h2 em {
+  color: var(--signal-deep);
+}
+
+.hud-body {
+  font-family: var(--font-sans);
+  font-size: clamp(15px, 1.15vw, 17px);
+  line-height: 1.55;
+  color: var(--fg-muted);
+  max-width: 42ch;
+  margin: 0;
+}
+
+.hud-quote {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+  line-height: 1.18;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.hud-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hud-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg);
+  padding: 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--bg);
+  background: var(--signal);
+  padding: 13px 20px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.hud-btn:hover,
+.hud-btn:focus-visible {
+  transform: translateY(-2px);
+}
+.hud-btn--ghost {
+  background: transparent;
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.hud-panel {
+  position: relative;
+  padding: 20px 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.hud-rule {
+  height: 1px;
+  border: 0;
+  background: var(--line);
+  margin: 14px 0;
+}
+
+.hud-mono {
+  font-family: var(--font-mono);
+}
+
+/* ---------------- 3D-anchored callouts (src/core/dom.ts) ---------------- */
+
+.callout {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+.callout-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.callout-svg path {
+  fill: none;
+  stroke: var(--fg);
+  stroke-opacity: 0.6;
+  stroke-width: 1;
+}
+.callout-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+}
+.callout-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg);
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .rise .rise-w > span {
+    transition-delay: 0s !important;
+  }
+}
+
+/* ---------------- word reveal (src/core/dom.ts rise/setRise) ----------------
+   THEME: restyle the motion (Orbit decoded, Resonance rose, Press stamped,
+   Town popped, Arcade blinked in). Neutral: a short rise + fade. */
+.rise .rise-w {
+  display: inline-block;
+  vertical-align: top;
+  visibility: hidden;
+  transition: visibility 0s linear 0.3s;
+}
+.rise.is-in .rise-w {
+  visibility: visible;
+  transition-delay: 0s;
+}
+.rise .rise-w > span {
+  display: inline-block;
+  opacity: 0;
+  transform: translate3d(0, 0.4em, 0);
+  transition:
+    transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.35s ease;
+  transition-delay: calc(var(--i, 0) * 35ms);
+}
+.rise.is-in .rise-w > span {
+  opacity: 1;
+  transform: none;
+}
+.rise:not(.is-in) .rise-w > span {
+  transition-duration: 0.25s, 0.2s;
+  transition-delay: 0s;
+}
+
+/* ---------------- accessible copy layer (src/core/srContent.ts) ---------------- */
+
+.sr-copy {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: transparent;
+}
+.sr-copy :is(a, button) {
+  pointer-events: auto;
+}
+.sr-copy :is(a, button):focus {
+  position: fixed;
+  left: 50%;
+  /* THEME: put the pill where the chapters' own copy isn't (top by default) */
+  top: calc(var(--safe-top) + 8px);
+  transform: translateX(-50%);
+  z-index: 40;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 2 * var(--gutter)));
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--signal);
+  padding: 12px 18px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+.sr-copy :is(a, button):focus .sr-note {
+  display: none;
+}
+.sr-copy :is(h1, h2):focus {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--safe-top) + 8px);
+  transform: translateX(-50%);
+  z-index: 40;
+  margin: 0;
+  white-space: nowrap;
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--paper-2);
+  padding: 12px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  outline: none;
+}
+.sr-copy [data-copy-status]:not(:empty) {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--safe-top) + 64px);
+  transform: translateX(-50%);
+  z-index: 40;
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--signal);
+  padding: 10px 16px;
+  border: 2px solid var(--ink);
+}
+.sr-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  z-index: 120;
+  transform: translate(-50%, -160%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--signal);
+  padding: 10px 16px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  transition: transform 0.2s ease;
+}
+.skip-link:focus {
+  transform: translate(-50%, 0);
+  outline: none;
+}
+
+/* phones and scaled-down devices (html.lowfx, set by the engine): no
+   backdrop-filter over the animating canvas — it costs 15–25% GPU */
+.lowfx .hud-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(13, 15, 18, 0.9);
+}
