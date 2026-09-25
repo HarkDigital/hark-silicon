@@ -13,7 +13,7 @@ import '../chapter.css'
  */
 export default function create(): Chapter {
   const group = new THREE.Group()
-  const mark = placeholderMark('#3a7bff')
+  const mark = placeholderMark()
   mark.scale.setScalar(1.6)
   group.add(mark, placeholderFloor())
   const B = beat(0, SERVICES.length, 0.08, 0.94)

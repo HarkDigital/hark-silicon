@@ -14,7 +14,7 @@ const SHOW = [STATS[0], STATS[2], STATS[1]] // 10 years, $1M+, 15
 
 export default function create(): Chapter {
   const group = new THREE.Group()
-  const mark = placeholderMark('#ffd84a')
+  const mark = placeholderMark()
   mark.scale.setScalar(1.4)
   group.add(mark, placeholderFloor())
   const B = beat(0, PROCESS.length, 0.1, 0.78)

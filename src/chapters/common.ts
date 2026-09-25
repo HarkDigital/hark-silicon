@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { logoGeometry, logoParts } from '../logo/logo'
+import { chipPackage } from '../kit/silicon'
 import { clamp } from '../core/math'
 import type { CameraPose, Frame } from '../core/types'
 
@@ -13,26 +13,19 @@ import type { CameraPose, Frame } from '../core/types'
  *   - in/out beats kept clear of the engine's cut window (first/last ~6%)
  */
 
-/** The Hark mark as a lit 3D block with a glowing diamond — a stand-in hero object. */
-export function placeholderMark(color = '#00e27a'): THREE.Group {
+/** The Hark chip (kit chipPackage) — a stand-in hero object, standing up to face the camera. */
+export function placeholderMark(): THREE.Group {
   const g = new THREE.Group()
-  const body = new THREE.Mesh(
-    logoGeometry({ depth: 0.22 }),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.1 }),
-  )
-  g.add(body)
-  const diamond = new THREE.Mesh(
-    new THREE.ShapeGeometry(logoParts().diamond),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color('#00ff85').multiplyScalar(2.2), toneMapped: false }),
-  )
-  diamond.position.z = 0.125
-  g.add(diamond)
+  const chip = chipPackage({ w: 1.6, kind: 'qfp', pinsPerSide: 14, lines: ['HARK-1', 'MAKE · LISTEN'] })
+  chip.rotation.x = Math.PI / 2
+  chip.position.z = -0.1
+  g.add(chip)
   return g
 }
 
 /** A faint reference grid floor so placeholder scenes read as space. */
 export function placeholderFloor(size = 30, y = -1.4): THREE.GridHelper {
-  const grid = new THREE.GridHelper(size, size, 0x3a4150, 0x262b34)
+  const grid = new THREE.GridHelper(size, size, 0x1c2430, 0x10151c)
   grid.position.y = y
   return grid
 }

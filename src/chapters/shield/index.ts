@@ -12,7 +12,7 @@ import '../chapter.css'
  */
 export default function create(): Chapter {
   const group = new THREE.Group()
-  const mark = placeholderMark('#ff5a6e')
+  const mark = placeholderMark()
   mark.scale.setScalar(1.6)
   group.add(mark, placeholderFloor())
   const stat = STATS.find(s => s.value === '24/7')!
@@ -39,7 +39,7 @@ export default function create(): Chapter {
       reveal(copy, smoothstep(0.35, 0.42, local) * (1 - smoothstep(0.94, 0.97, local)))
       setRise(title, local > 0.36 && local < 0.95)
       reveal(calm, smoothstep(0.7, 0.76, local) * (1 - smoothstep(0.94, 0.97, local)), 0)
-      ctx.world.params.bottom = threat > 0.5 ? '#3a1d24' : '#2a2f3a'
+      if (threat > 0.5) ctx.world.params.a = '#ff3b3b'
     },
     camera(_local, frame, out) {
       framedCamera(out, frame)

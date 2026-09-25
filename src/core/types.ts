@@ -23,6 +23,12 @@ export interface Frame {
   mobile: boolean
   /** true when the user prefers reduced motion — calm idle animation */
   reducedMotion: boolean
+  /**
+   * true while the visitor has paused ambient motion (a Motion toggle sets
+   * engine.motion = false): frame.time stops advancing, so idle animation
+   * holds still. Scroll-driven motion, cuts and damping (frame.dt) continue.
+   */
+  still?: boolean
 }
 
 /** Camera pose a chapter writes each frame. The engine adds pointer parallax. */

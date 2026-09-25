@@ -1,15 +1,15 @@
 /* ------------------------------------------------------------------
-   Hark concept starter — base tokens, layout and the shared HUD vocabulary.
+   Hark · Silicon — base tokens, layout and the shared HUD vocabulary.
 
-   Two parts:
-   1. STRUCTURE (keep): #gl / #track / #stages / .stage / #chrome / #loader,
-      the accessible copy layer (.sr-copy focus pills), .skip-link, reduced
-      motion. The engine and UI depend on these.
-   2. THEME (replace): tokens, fonts and the HUD vocabulary every chapter
-      uses — .hud-eyebrow .hud-title .hud-h2 .hud-body .hud-quote .hud-label
-      .hud-tags/.hud-tag .hud-btn(--ghost) .hud-panel .hud-rule .callout*
-      and the .rise word reveal. Stages over dark/light scenes can flip with
-      a class (e.g. .is-dark) that redefines the --fg tokens.
+   Microchips, shot like a product macro. The page reads like a DATASHEET
+   in the dark: matte panels with a chamfered pin-1 corner and a fine gold
+   hairline, part-number labels in Martian Mono, Space Grotesk headlines,
+   and one colour of light — the Hark signal green, which is also what runs
+   along the traces. Headline words CLOCK IN: each word is revealed left to
+   right behind a thin green signal edge, one word per tick.
+
+   STRUCTURE (keep): #gl / #track / #stages / .stage / #chrome / #loader,
+   the accessible copy layer (.sr-copy focus pills), .skip-link, reduced motion.
 
    Rules learned the hard way: no color-mix() (Safari 15 + the minifier drops
    fallbacks — use rgba tokens); write -webkit-backdrop-filter BEFORE
@@ -17,24 +17,28 @@
    ------------------------------------------------------------------ */
 
 :root {
-  /* THEME tokens */
-  --bg: #0d0f12;
-  --ink: #0d0f12;
-  --paper: #f4f2ee;
-  --paper-2: #f4f2ee;
+  --bg: #05070b;
+  --ink: #05070b;
+  --paper: #eef1f4;
+  --paper-2: #eef1f4;
   --signal: #00ff85;
   --signal-deep: #00a857;
+  --gold: #d9a84a;
+  --cyan: #39e0ff;
+  --amber: #ffb020;
 
-  --fg: var(--paper);
-  --fg-muted: rgba(244, 242, 238, 0.78);
-  --fg-faint: rgba(244, 242, 238, 0.64);
-  --line: rgba(244, 242, 238, 0.16);
-  --line-strong: rgba(244, 242, 238, 0.38);
-  --panel: rgba(13, 15, 18, 0.72);
+  --fg: #eef1f4;
+  --fg-muted: rgba(238, 241, 244, 0.8);
+  --fg-faint: rgba(238, 241, 244, 0.66);
+  --line: rgba(238, 241, 244, 0.14);
+  --line-strong: rgba(238, 241, 244, 0.36);
+  --panel: rgba(9, 11, 15, 0.8);
+  --hair: rgba(217, 168, 74, 0.55);
+  --chamfer: 14px;
 
-  --font-display: 'Inter Variable', system-ui, sans-serif;
-  --font-sans: 'Inter Variable', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --font-display: 'Space Grotesk Variable', system-ui, sans-serif;
+  --font-sans: 'Space Grotesk Variable', system-ui, sans-serif;
+  --font-mono: 'Martian Mono Variable', ui-monospace, monospace;
 
   /* STRUCTURE: the persistent chrome owns these bands (+ notch insets) */
   --gutter: max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
@@ -44,14 +48,21 @@
   color-scheme: dark;
 }
 
-/* example tone flip for light scenes: add .is-light to a stage */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --safe-top: calc(56px + env(safe-area-inset-top, 0px));
+    --safe-bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* tone flip for a light stage (e.g. the cleanroom): add .is-light */
 .is-light {
   --fg: var(--ink);
-  --fg-muted: rgba(13, 15, 18, 0.74);
-  --fg-faint: rgba(13, 15, 18, 0.64);
-  --line: rgba(13, 15, 18, 0.14);
-  --line-strong: rgba(13, 15, 18, 0.32);
-  --panel: rgba(244, 242, 238, 0.82);
+  --fg-muted: rgba(5, 7, 11, 0.76);
+  --fg-faint: rgba(5, 7, 11, 0.64);
+  --line: rgba(5, 7, 11, 0.14);
+  --line-strong: rgba(5, 7, 11, 0.32);
+  --panel: rgba(238, 241, 244, 0.88);
 }
 
 *,
@@ -194,65 +205,67 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid var(--ink);
+  outline: 2px solid var(--signal);
   outline-offset: 3px;
 }
 
-.is-dark :focus-visible {
-  outline-color: var(--paper-2);
+.is-light :focus-visible {
+  outline-color: var(--ink);
 }
 
-/* ---------------- HUD vocabulary (THEME) ---------------- */
+/* ---------------- HUD vocabulary ---------------- */
 
 .hud-label {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-muted);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
+/* eyebrow: a pin (a small gold pad with a green signal dot), then mono caps */
 .hud-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--fg);
   margin: 0;
 }
 .hud-eyebrow::before {
   content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--signal);
+  width: 14px;
+  height: 8px;
+  border-radius: 1px;
+  background: radial-gradient(circle at 70% 50%, var(--signal) 0 2px, transparent 2.6px), linear-gradient(90deg, #e2b865, #a8792c);
+  box-shadow: 0 0 10px rgba(0, 255, 133, 0.35);
 }
 
 .hud-title {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.035em;
+  font-weight: 600;
+  letter-spacing: -0.045em;
   line-height: 0.92;
-  font-size: clamp(3rem, 8vw, 8rem);
+  font-size: clamp(3rem, 8.4vw, 8.6rem);
   margin: 0;
   color: var(--fg);
   text-wrap: balance;
 }
 .hud-h2 {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: -0.04em;
   line-height: 0.98;
-  font-size: clamp(2rem, 4.4vw, 4.2rem);
+  font-size: clamp(2.1rem, 4.6vw, 4.4rem);
   margin: 0;
   color: var(--fg);
   text-wrap: balance;
 }
-/* <em> = the accent word */
+/* <em> = the accent words: signal green */
 .hud-title em,
 .hud-h2 em {
   font-style: normal;
@@ -265,19 +278,19 @@ a {
 
 .hud-body {
   font-family: var(--font-sans);
-  font-size: clamp(15px, 1.15vw, 17px);
-  line-height: 1.55;
+  font-size: clamp(15px, 1.12vw, 17px);
+  line-height: 1.58;
   color: var(--fg-muted);
-  max-width: 42ch;
+  max-width: 44ch;
   margin: 0;
 }
 
 .hud-quote {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
-  line-height: 1.18;
-  letter-spacing: -0.015em;
+  font-size: clamp(1.3rem, 2.3vw, 2.2rem);
+  line-height: 1.22;
+  letter-spacing: -0.025em;
   color: var(--fg);
   margin: 0;
   text-wrap: pretty;
@@ -291,67 +304,86 @@ a {
   padding: 0;
   list-style: none;
 }
+/* tags: little SMD-part chips (a body with two tin ends) */
 .hud-tag {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
+  font-size: 10px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--fg);
-  padding: 4px 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  padding: 4px 10px;
+  background:
+    linear-gradient(90deg, rgba(200, 204, 210, 0.5) 0 3px, transparent 3px calc(100% - 3px), rgba(200, 204, 210, 0.5) calc(100% - 3px)),
+    rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 2px;
 }
 
+/* buttons: a lit signal pad */
 .hud-btn {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   text-decoration: none;
-  color: var(--bg);
+  color: #02140b;
   background: var(--signal);
   padding: 13px 20px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 3px;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+  box-shadow: 0 0 24px rgba(0, 255, 133, 0.25);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .hud-btn:hover,
 .hud-btn:focus-visible {
   transform: translateY(-2px);
 }
 .hud-btn--ghost {
-  background: transparent;
+  background: rgba(9, 11, 15, 0.5);
   color: var(--fg);
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
+/* the datasheet panel: matte, a gold hairline, a chamfered pin-1 corner */
 .hud-panel {
   position: relative;
-  padding: 20px 22px;
+  padding: 22px 24px 20px;
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 3px;
+  clip-path: polygon(var(--chamfer) 0, 100% 0, 100% 100%, 0 100%, 0 var(--chamfer));
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.hud-panel::before {
+  /* the gold hairline along the top edge and the pin-1 chamfer */
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--hair), rgba(217, 168, 74, 0.08) 60%, transparent) top left / 100% 1px no-repeat,
+    linear-gradient(135deg, transparent calc(var(--chamfer) - 1px), var(--hair) calc(var(--chamfer) - 1px), var(--hair) var(--chamfer), transparent var(--chamfer)) top left / calc(var(--chamfer) + 2px) calc(var(--chamfer) + 2px) no-repeat;
 }
 
 .hud-rule {
   height: 1px;
   border: 0;
-  background: var(--line);
-  margin: 14px 0;
+  background: linear-gradient(90deg, var(--line-strong), transparent);
+  margin: 16px 0;
 }
 
 .hud-mono {
   font-family: var(--font-mono);
 }
 
-/* ---------------- 3D-anchored callouts (src/core/dom.ts) ---------------- */
+/* ---------------- 3D-anchored callouts (src/core/dom.ts) — probe labels ---------------- */
 
 .callout {
   position: absolute;
@@ -368,8 +400,8 @@ a {
 }
 .callout-svg path {
   fill: none;
-  stroke: var(--fg);
-  stroke-opacity: 0.6;
+  stroke: var(--signal);
+  stroke-opacity: 0.7;
   stroke-width: 1;
 }
 .callout-dot {
@@ -380,6 +412,7 @@ a {
   height: 8px;
   border-radius: 50%;
   background: var(--signal);
+  box-shadow: 0 0 10px rgba(0, 255, 133, 0.8);
 }
 .callout-label {
   position: absolute;
@@ -387,11 +420,14 @@ a {
   top: 0;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--fg);
   line-height: 1.5;
+  padding: 2px 8px;
+  background: rgba(9, 11, 15, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 133, 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -408,8 +444,8 @@ a {
 }
 
 /* ---------------- word reveal (src/core/dom.ts rise/setRise) ----------------
-   THEME: restyle the motion (Orbit decoded, Resonance rose, Press stamped,
-   Town popped, Arcade blinked in). Neutral: a short rise + fade. */
+   Silicon: words CLOCK IN — each is wiped on left to right behind a thin
+   signal-green edge, one word per tick. */
 .rise .rise-w {
   display: inline-block;
   vertical-align: top;
@@ -422,19 +458,48 @@ a {
 }
 .rise .rise-w > span {
   display: inline-block;
+  position: relative;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.42s cubic-bezier(0.65, 0, 0.35, 1);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+.rise .rise-w > span::after {
+  /* the signal edge */
+  content: '';
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  right: 0;
+  width: 2px;
+  background: var(--signal);
+  box-shadow: 0 0 10px var(--signal);
   opacity: 0;
-  transform: translate3d(0, 0.4em, 0);
-  transition:
-    transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 0.35s ease;
-  transition-delay: calc(var(--i, 0) * 35ms);
+  transition: opacity 0.2s ease;
+  transition-delay: calc(var(--i, 0) * 70ms);
 }
 .rise.is-in .rise-w > span {
-  opacity: 1;
-  transform: none;
+  clip-path: inset(0 0 0 0);
+}
+.rise.is-in .rise-w > span::after {
+  animation: rise-edge 0.42s cubic-bezier(0.65, 0, 0.35, 1) 1 both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+@keyframes rise-edge {
+  0% {
+    opacity: 1;
+    right: 100%;
+  }
+  85% {
+    opacity: 1;
+    right: 0;
+  }
+  100% {
+    opacity: 0;
+    right: 0;
+  }
 }
 .rise:not(.is-in) .rise-w > span {
-  transition-duration: 0.25s, 0.2s;
+  transition-duration: 0.22s;
   transition-delay: 0s;
 }
 
@@ -551,4 +616,11 @@ a {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: rgba(13, 15, 18, 0.9);
+}
+
+/* phones and scaled-down devices (html.lowfx): no backdrop-filter over the canvas */
+.lowfx .hud-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(9, 11, 15, 0.92);
 }

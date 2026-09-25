@@ -1,6 +1,6 @@
-// THEME: fonts (@fontsource packages). Neutral defaults: Inter + JetBrains Mono.
-import '@fontsource-variable/inter'
-import '@fontsource-variable/jetbrains-mono'
+// Fonts: Space Grotesk (display + body) and Martian Mono (datasheet labels, part numbers).
+import '@fontsource-variable/space-grotesk'
+import '@fontsource-variable/martian-mono/standard.css'
 import './styles/base.css'
 import './ui/ui.css'
 

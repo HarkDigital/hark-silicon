@@ -100,6 +100,12 @@ export class Engine {
   private jump: { t: number; id: string; local: number; swapped: boolean } | null = null
   /** true while something (e.g. the rotate gate) covers the scene — skip rendering */
   paused = false
+  /**
+   * Ambient motion on/off. When off, frame.time holds still once the intro
+   * reveal has had time to play (3 s after 'hark:reveal').
+   */
+  motion = true
+  private revealAt = -1
   /** called when the GPU context is gone for good (main.ts shows the fallback) */
   onContextGone: (() => void) | null = null
   private listenerFailed = new WeakSet<object>()
@@ -129,7 +135,7 @@ export class Engine {
     //   cinematic ones, NoToneMapping suits stylised post passes (palette
     //   snaps, ink densities). Shadows cost real GPU time — enable only if
     //   the look needs them (then keep the shadow frustum tight).
-    this.renderer.setClearColor(0x0d0f12, 1)
+    this.renderer.setClearColor(0x05070b, 1)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.NeutralToneMapping
     this.renderer.shadowMap.enabled = false
@@ -138,7 +144,7 @@ export class Engine {
     this.renderer.info.autoReset = false
     this.renderer.debug.checkShaderErrors = !import.meta.env.PROD
 
-    this.world = new World(this.scene, this.mobile)
+    this.world = new World(this.scene, this.mobile, this.renderer)
     this.scene.add(this.world.object)
     this.assets = new Assets(this.renderer)
     // MSAA only where it pays: 1x desktop screens. Retina is already supersampled,
@@ -633,7 +639,10 @@ export class Engine {
     const f = this.frame
     const raw = Math.max(this.timer.getDelta(), 0)
     f.dt = Math.min(raw, 1 / 20)
-    f.time += f.dt
+    if (this.revealAt < 0 && document.documentElement.dataset.ready === '1') this.revealAt = performance.now()
+    const idle = this.motion || this.revealAt < 0 || performance.now() - this.revealAt < 3000
+    if (idle) f.time += f.dt
+    f.still = !idle
     this.adaptResolution(Math.min(raw, 0.1), f.dt)
     f.pointer.x = damp(f.pointer.x, f.pointerRaw.x, 3.5, f.dt)
     f.pointer.y = damp(f.pointer.y, f.pointerRaw.y, 3.5, f.dt)
@@ -661,9 +670,19 @@ export class Engine {
 
     // glitch ramps up approaching any internal cut and back down after it
     let d = Infinity
-    for (let i = 1; i < this.slots.length; i++) d = Math.min(d, Math.abs(scrollVh - this.slots[i].start))
+    let side = 1
+    for (let i = 1; i < this.slots.length; i++) {
+      const dd = scrollVh - this.slots[i].start
+      if (Math.abs(dd) < d) {
+        d = Math.abs(dd)
+        side = dd < 0 ? -1 : 1
+      }
+    }
     const tr = clamp(1 - d / CUT_WINDOW)
-    const cut = Math.max(tr * tr * (3 - 2 * tr), fx)
+    const scrollCut = tr * tr * (3 - 2 * tr)
+    const cut = Math.max(scrollCut, fx)
+    // which side of the cut we're on (the SEM beam scans down, then back into colour)
+    this.post.cutSide = fx > scrollCut && this.jump ? (this.jump.swapped ? 1 : -1) : side
     if (this.reducedMotion) {
       // no ripples or flashes: a quiet dip to paper instead
       this.post.transition = 0
